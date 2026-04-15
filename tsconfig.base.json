@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true
+  }
+}

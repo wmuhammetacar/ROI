@@ -1,0 +1,25 @@
+{
+  "name": "roi-platform",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.32.1",
+  "description": "ROI monorepo: API + admin + POS + kitchen display",
+  "scripts": {
+    "dev": "pnpm run dev:api",
+    "dev:api": "pnpm --filter @roi/api start:dev",
+    "dev:admin": "pnpm run build:shared && pnpm --filter @roi/admin-web dev",
+    "dev:pos": "pnpm run build:shared && pnpm --filter @roi/pos-web dev",
+    "dev:kitchen": "pnpm run build:shared && pnpm --filter @roi/kitchen-display dev",
+    "dev:qr": "pnpm run build:shared && pnpm --filter @roi/qr-web dev",
+    "dev:all": "pnpm run build:shared && pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm -r build",
+    "build:shared": "pnpm --filter @roi/shared-types build && pnpm --filter @roi/shared-utils build && pnpm --filter @roi/api-client build",
+    "build:api": "pnpm --filter @roi/api build",
+    "build:frontends": "pnpm --filter @roi/admin-web build && pnpm --filter @roi/pos-web build && pnpm --filter @roi/kitchen-display build && pnpm --filter @roi/qr-web build",
+    "prisma:generate": "pnpm --filter @roi/api prisma:generate",
+    "prisma:migrate": "pnpm --filter @roi/api prisma:migrate",
+    "prisma:deploy": "pnpm --filter @roi/api prisma:deploy",
+    "prisma:seed": "pnpm --filter @roi/api prisma:seed",
+    "create:superadmin": "node scripts/create-superadmin.cjs"
+  }
+}

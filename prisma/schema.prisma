@@ -1,0 +1,952 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  OUT_OF_SERVICE
+}
+
+enum TableSessionStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum ServiceType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+  QUICK_SALE
+}
+
+enum OrderStatus {
+  DRAFT
+  PLACED
+  SENT_TO_STATION
+  PREPARING
+  READY
+  SERVED
+  BILLED
+  PAID
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum ProductType {
+  SIMPLE
+  VARIABLE
+}
+
+enum ModifierSelectionType {
+  SINGLE
+  MULTIPLE
+}
+
+enum StationType {
+  KITCHEN
+  BAR
+  DESSERT
+  PACKAGING
+  OTHER
+}
+
+enum ProductionTicketStatus {
+  OPEN
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum ProductionTicketItemStatus {
+  QUEUED
+  IN_PROGRESS
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  OTHER
+}
+
+enum RegisterShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum PaymentTransactionStatus {
+  COMPLETED
+  VOIDED
+  REFUNDED_PARTIAL
+  REFUNDED_FULL
+}
+
+enum UnitKind {
+  WEIGHT
+  VOLUME
+  COUNT
+  OTHER
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT_PLUS
+  ADJUSTMENT_MINUS
+  WASTE
+}
+
+enum StockReferenceType {
+  ORDER
+  PAYMENT
+  RECIPE_CONSUMPTION
+  MANUAL_ADJUSTMENT
+  WASTE_RECORD
+  OTHER
+}
+
+enum IntegrationProviderType {
+  MARKETPLACE
+  ONLINE_ORDERING
+  COURIER
+  OTHER
+}
+
+enum BranchIntegrationConfigStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+}
+
+enum ExternalOrderIngestionStatus {
+  RECEIVED
+  NORMALIZED
+  CREATED_INTERNAL_ORDER
+  FAILED
+}
+
+enum IntegrationSyncDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum IntegrationSyncStatus {
+  SUCCESS
+  FAILED
+  RETRY_PENDING
+}
+
+enum PublicOrderIdempotencyStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model Branch {
+  id                    String                 @id @default(cuid())
+  name                  String                 @unique
+  users                 User[]
+  floors                Floor[]
+  tables                Table[]
+  tableSessions         TableSession[]
+  orders                Order[]
+  categories            Category[]
+  products              Product[]
+  modifierGroups        ModifierGroup[]
+  branchPriceOverrides  BranchPriceOverride[]
+  stations              Station[]
+  productStationRoutes  ProductStationRoute[]
+  productionTickets     ProductionTicket[]
+  productionTicketItems ProductionTicketItem[]
+  registerShifts        RegisterShift[]
+  paymentTransactions   PaymentTransaction[]
+  refunds               Refund[]
+  ingredients           Ingredient[]
+  recipes               Recipe[]
+  stockMovements        StockMovement[]
+  wasteRecords          WasteRecord[]
+  orderConsumptions     OrderConsumption[]
+  branchIntegrationConfigs BranchIntegrationConfig[]
+  menuMappings          MenuMapping[]
+  externalOrders        ExternalOrder[]
+  syncAttempts          IntegrationSyncAttempt[]
+  publicOrderIdempotencyRecords PublicOrderIdempotency[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+}
+
+model User {
+  id                         String               @id @default(cuid())
+  name                       String
+  email                      String               @unique
+  password                   String
+  branchId                   String
+  branch                     Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  userRoles                  UserRole[]
+  auditLogs                  AuditLog[]
+  openedTableSessions        TableSession[]       @relation("OpenedTableSessions")
+  assignedTableSessions      TableSession[]       @relation("AssignedWaiterSessions")
+  createdOrders              Order[]              @relation("CreatedOrders")
+  orderEvents                OrderEvent[]         @relation("OrderEventActor")
+  openedRegisterShifts       RegisterShift[]      @relation("OpenedRegisterShifts")
+  closedRegisterShifts       RegisterShift[]      @relation("ClosedRegisterShifts")
+  createdPaymentTransactions PaymentTransaction[] @relation("CreatedPaymentTransactions")
+  createdRefunds             Refund[]             @relation("CreatedRefunds")
+  createdStockMovements      StockMovement[]      @relation("CreatedStockMovements")
+  createdWasteRecords        WasteRecord[]        @relation("CreatedWasteRecords")
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+}
+
+model Role {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Permission {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  rolePermissions RolePermission[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@id([roleId, permissionId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([timestamp])
+}
+
+model Floor {
+  id        String   @id @default(cuid())
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  name      String
+  sortOrder Int      @default(0)
+  tables    Table[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, name])
+  @@index([branchId, sortOrder])
+}
+
+model Table {
+  id            String         @id @default(cuid())
+  branchId      String
+  floorId       String
+  name          String
+  capacity      Int
+  status        TableStatus    @default(AVAILABLE)
+  branch        Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  floor         Floor          @relation(fields: [floorId], references: [id], onDelete: Restrict)
+  tableSessions TableSession[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([branchId, name])
+  @@index([branchId, floorId])
+  @@index([branchId, status])
+}
+
+model TableSession {
+  id                String             @id @default(cuid())
+  branchId          String
+  tableId           String
+  openedByUserId    String
+  assignedWaiterId  String?
+  guestCount        Int                @default(1)
+  status            TableSessionStatus @default(OPEN)
+  openedAt          DateTime           @default(now())
+  closedAt          DateTime?
+  notes             String?
+  branch            Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  table             Table              @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  openedByUser      User               @relation("OpenedTableSessions", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  assignedWaiter    User?              @relation("AssignedWaiterSessions", fields: [assignedWaiterId], references: [id], onDelete: SetNull)
+  orders            Order[]
+  productionTickets ProductionTicket[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([branchId, tableId, status])
+  @@index([openedByUserId])
+  @@index([assignedWaiterId])
+}
+
+model Order {
+  id                    String                 @id @default(cuid())
+  branchId              String
+  tableSessionId        String?
+  serviceType           ServiceType
+  status                OrderStatus            @default(DRAFT)
+  orderNumber           String
+  customerName          String?
+  customerPhone         String?
+  notes                 String?
+  billedAt              DateTime?
+  paidAt                DateTime?
+  subtotal              Decimal                @default(0) @db.Decimal(12, 2)
+  discountTotal         Decimal                @default(0) @db.Decimal(12, 2)
+  grandTotal            Decimal                @default(0) @db.Decimal(12, 2)
+  createdByUserId       String
+  branch                Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  tableSession          TableSession?          @relation(fields: [tableSessionId], references: [id], onDelete: SetNull)
+  createdByUser         User                   @relation("CreatedOrders", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  items                 OrderItem[]
+  events                OrderEvent[]
+  productionTickets     ProductionTicket[]
+  productionTicketItems ProductionTicketItem[]
+  paymentTransactions   PaymentTransaction[]
+  refunds               Refund[]
+  orderConsumption      OrderConsumption?
+  externalOrders        ExternalOrder[]
+  publicOrderIdempotencyRecords PublicOrderIdempotency[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@unique([branchId, orderNumber])
+  @@index([branchId, status, serviceType])
+  @@index([tableSessionId])
+  @@index([createdByUserId])
+}
+
+model IntegrationProvider {
+  id             String                  @id @default(cuid())
+  code           String                  @unique
+  name           String
+  providerType   IntegrationProviderType
+  isActive       Boolean                 @default(true)
+  branchConfigs  BranchIntegrationConfig[]
+  menuMappings   MenuMapping[]
+  externalOrders ExternalOrder[]
+  syncAttempts   IntegrationSyncAttempt[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([isActive, providerType])
+}
+
+model BranchIntegrationConfig {
+  id              String                        @id @default(cuid())
+  branchId        String
+  providerId      String
+  status          BranchIntegrationConfigStatus @default(INACTIVE)
+  credentialsJson Json?
+  settingsJson    Json?
+  lastSyncAt      DateTime?
+  branch          Branch                        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  provider        IntegrationProvider           @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+
+  @@unique([branchId, providerId])
+  @@index([branchId, status, updatedAt])
+  @@index([providerId, status])
+}
+
+model MenuMapping {
+  id               String              @id @default(cuid())
+  branchId         String
+  providerId       String
+  externalItemId   String
+  externalItemName String
+  productId        String
+  variantId        String?
+  isActive         Boolean             @default(true)
+  branch           Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  provider         IntegrationProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  product          Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant          ProductVariant?     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([branchId, providerId, externalItemId])
+  @@index([branchId, providerId, isActive])
+  @@index([productId, variantId])
+}
+
+model ExternalOrder {
+  id              String                       @id @default(cuid())
+  branchId        String
+  providerId      String
+  externalOrderId String
+  externalStatus  String
+  serviceType     ServiceType
+  payloadJson     Json
+  normalizedJson  Json
+  internalOrderId String?
+  ingestionStatus ExternalOrderIngestionStatus @default(RECEIVED)
+  failureReason   String?
+  branch          Branch                       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  provider        IntegrationProvider          @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  internalOrder   Order?                       @relation(fields: [internalOrderId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+
+  @@unique([branchId, providerId, externalOrderId])
+  @@index([branchId, providerId, ingestionStatus, createdAt])
+  @@index([internalOrderId])
+}
+
+model IntegrationSyncAttempt {
+  id                 String                   @id @default(cuid())
+  branchId           String
+  providerId         String
+  direction          IntegrationSyncDirection
+  operation          String
+  targetId           String?
+  status             IntegrationSyncStatus
+  requestPayloadJson Json?
+  responsePayloadJson Json?
+  errorMessage       String?
+  branch             Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  provider           IntegrationProvider      @relation(fields: [providerId], references: [id], onDelete: Restrict)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@index([branchId, providerId, direction, createdAt])
+  @@index([branchId, providerId, status, createdAt])
+}
+
+model PublicOrderIdempotency {
+  id              String                       @id @default(cuid())
+  branchId        String
+  idempotencyKey  String
+  clientSessionId String?
+  orderId         String?
+  status          PublicOrderIdempotencyStatus @default(PENDING)
+  errorMessage    String?
+  branch          Branch                       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  order           Order?                       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+
+  @@unique([branchId, idempotencyKey])
+  @@index([branchId, createdAt])
+  @@index([orderId])
+}
+
+model OrderItem {
+  id                        String                       @id @default(cuid())
+  orderId                   String
+  productNameSnapshot       String
+  productId                 String?
+  variantId                 String?
+  stationId                 String?
+  variantNameSnapshot       String?
+  baseProductPriceSnapshot  Decimal?                     @db.Decimal(12, 2)
+  variantPriceDeltaSnapshot Decimal?                     @db.Decimal(12, 2)
+  quantity                  Decimal                      @db.Decimal(10, 3)
+  unitPrice                 Decimal                      @db.Decimal(12, 2)
+  lineTotal                 Decimal                      @db.Decimal(12, 2)
+  notes                     String?
+  status                    OrderItemStatus              @default(ACTIVE)
+  order                     Order                        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  station                   Station?                     @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  modifierSelections        OrderItemModifierSelection[]
+  productionTicketItems     ProductionTicketItem[]
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
+
+  @@index([orderId, status])
+  @@index([productId, variantId])
+  @@index([stationId])
+}
+
+model OrderItemModifierSelection {
+  id                         String    @id @default(cuid())
+  orderItemId                String
+  modifierGroupId            String
+  modifierGroupNameSnapshot  String
+  modifierOptionId           String
+  modifierOptionNameSnapshot String
+  priceDeltaSnapshot         Decimal   @db.Decimal(12, 2)
+  orderItem                  OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  @@unique([orderItemId, modifierGroupId, modifierOptionId])
+  @@index([orderItemId, createdAt])
+  @@index([modifierGroupId, modifierOptionId])
+}
+
+model OrderEvent {
+  id          String   @id @default(cuid())
+  orderId     String
+  eventType   String
+  actorUserId String
+  payloadJson Json?
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actorUser   User     @relation("OrderEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([actorUserId])
+}
+
+model UnitOfMeasure {
+  id          String       @id @default(cuid())
+  name        String
+  code        String       @unique
+  kind        UnitKind
+  ingredients Ingredient[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([name])
+}
+
+model Ingredient {
+  id             String          @id @default(cuid())
+  branchId       String
+  name           String
+  sku            String?
+  unitId         String
+  currentStock   Decimal         @db.Decimal(14, 3)
+  isActive       Boolean         @default(true)
+  branch         Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  unit           UnitOfMeasure   @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  recipeItems    RecipeItem[]
+  stockMovements StockMovement[]
+  wasteRecords   WasteRecord[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([branchId, name])
+  @@index([branchId, isActive, name])
+  @@index([unitId])
+}
+
+model Recipe {
+  id               String          @id @default(cuid())
+  branchId         String
+  productId        String?
+  productVariantId String?
+  name             String
+  isActive         Boolean         @default(true)
+  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  product          Product?        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  items            RecipeItem[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([branchId, productId])
+  @@unique([branchId, productVariantId])
+  @@index([branchId, isActive, createdAt])
+}
+
+model RecipeItem {
+  id           String     @id @default(cuid())
+  recipeId     String
+  ingredientId String
+  quantity     Decimal    @db.Decimal(12, 3)
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Restrict)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([recipeId, ingredientId])
+  @@index([ingredientId])
+}
+
+model StockMovement {
+  id              String             @id @default(cuid())
+  branchId        String
+  ingredientId    String
+  movementType    StockMovementType
+  quantity        Decimal            @db.Decimal(14, 3)
+  balanceBefore   Decimal            @db.Decimal(14, 3)
+  balanceAfter    Decimal            @db.Decimal(14, 3)
+  referenceType   StockReferenceType
+  referenceId     String?
+  notes           String?
+  createdByUserId String
+  branch          Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  ingredient      Ingredient         @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  createdByUser   User               @relation("CreatedStockMovements", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([branchId, createdAt])
+  @@index([ingredientId, createdAt])
+  @@index([branchId, movementType, createdAt])
+  @@index([branchId, referenceType, referenceId])
+  @@index([createdByUserId])
+}
+
+model WasteRecord {
+  id              String     @id @default(cuid())
+  branchId        String
+  ingredientId    String
+  quantity        Decimal    @db.Decimal(14, 3)
+  reason          String
+  createdByUserId String
+  branch          Branch     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  ingredient      Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  createdByUser   User       @relation("CreatedWasteRecords", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([branchId, ingredientId, createdAt])
+  @@index([createdByUserId])
+}
+
+model OrderConsumption {
+  id         String   @id @default(cuid())
+  branchId   String
+  orderId    String   @unique
+  consumedAt DateTime @default(now())
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([branchId, consumedAt])
+}
+
+model RegisterShift {
+  id                        String               @id @default(cuid())
+  branchId                  String
+  openedByUserId            String
+  closedByUserId            String?
+  openingCashAmount         Decimal              @db.Decimal(12, 2)
+  closingCashAmountExpected Decimal?             @db.Decimal(12, 2)
+  closingCashAmountActual   Decimal?             @db.Decimal(12, 2)
+  varianceAmount            Decimal?             @db.Decimal(12, 2)
+  status                    RegisterShiftStatus  @default(OPEN)
+  notes                     String?
+  openedAt                  DateTime             @default(now())
+  closedAt                  DateTime?
+  branch                    Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  openedByUser              User                 @relation("OpenedRegisterShifts", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  closedByUser              User?                @relation("ClosedRegisterShifts", fields: [closedByUserId], references: [id], onDelete: SetNull)
+  paymentTransactions       PaymentTransaction[]
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+
+  @@index([branchId, status, openedAt])
+  @@index([branchId, openedByUserId, status])
+  @@index([openedByUserId, status])
+}
+
+model PaymentTransaction {
+  id              String                   @id @default(cuid())
+  branchId        String
+  orderId         String
+  registerShiftId String
+  paymentMethod   PaymentMethod
+  amount          Decimal                  @db.Decimal(12, 2)
+  status          PaymentTransactionStatus @default(COMPLETED)
+  referenceNo     String?
+  notes           String?
+  createdByUserId String
+  branch          Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  order           Order                    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  registerShift   RegisterShift            @relation(fields: [registerShiftId], references: [id], onDelete: Restrict)
+  createdByUser   User                     @relation("CreatedPaymentTransactions", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  refunds         Refund[]
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@index([branchId, orderId, createdAt])
+  @@index([registerShiftId, createdAt])
+  @@index([branchId, paymentMethod, status, createdAt])
+  @@index([createdByUserId])
+}
+
+model Refund {
+  id                   String             @id @default(cuid())
+  branchId             String
+  orderId              String
+  paymentTransactionId String
+  amount               Decimal            @db.Decimal(12, 2)
+  reason               String
+  createdByUserId      String
+  branch               Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  order                Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentTransaction   PaymentTransaction @relation(fields: [paymentTransactionId], references: [id], onDelete: Restrict)
+  createdByUser        User               @relation("CreatedRefunds", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([branchId, orderId, createdAt])
+  @@index([paymentTransactionId, createdAt])
+  @@index([createdByUserId])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  branchId    String
+  name        String
+  description String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([branchId, name])
+  @@index([branchId, isActive])
+  @@index([branchId, sortOrder, createdAt])
+}
+
+model Product {
+  id                 String                     @id @default(cuid())
+  branchId           String
+  categoryId         String
+  name               String
+  description        String?
+  sku                String?
+  imageUrl           String?
+  basePrice          Decimal                    @db.Decimal(12, 2)
+  sortOrder          Int                        @default(0)
+  isActive           Boolean                    @default(true)
+  isAvailable        Boolean                    @default(true)
+  productType        ProductType                @default(SIMPLE)
+  branch             Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  category           Category                   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  variants           ProductVariant[]
+  modifierGroupLinks ProductModifierGroupLink[]
+  priceOverrides     BranchPriceOverride[]
+  stationRoute       ProductStationRoute?
+  recipes            Recipe[]
+  menuMappings       MenuMapping[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  @@index([branchId, categoryId])
+  @@index([branchId, isActive, isAvailable])
+  @@index([branchId, sortOrder, createdAt])
+  @@index([branchId, name])
+}
+
+model ProductVariant {
+  id             String                @id @default(cuid())
+  productId      String
+  name           String
+  sku            String?
+  priceDelta     Decimal               @default(0) @db.Decimal(12, 2)
+  sortOrder      Int                   @default(0)
+  isActive       Boolean               @default(true)
+  product        Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  priceOverrides BranchPriceOverride[]
+  recipes        Recipe[]
+  menuMappings   MenuMapping[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([productId, name])
+  @@index([productId, sortOrder, createdAt])
+  @@index([productId, isActive])
+}
+
+model ModifierGroup {
+  id            String                     @id @default(cuid())
+  branchId      String
+  name          String
+  description   String?
+  selectionType ModifierSelectionType
+  minSelect     Int                        @default(0)
+  maxSelect     Int                        @default(1)
+  sortOrder     Int                        @default(0)
+  isActive      Boolean                    @default(true)
+  branch        Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  options       ModifierOption[]
+  productLinks  ProductModifierGroupLink[]
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  @@unique([branchId, name])
+  @@index([branchId, isActive])
+  @@index([branchId, sortOrder, createdAt])
+}
+
+model ModifierOption {
+  id              String        @id @default(cuid())
+  modifierGroupId String
+  name            String
+  priceDelta      Decimal       @default(0) @db.Decimal(12, 2)
+  sortOrder       Int           @default(0)
+  isActive        Boolean       @default(true)
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([modifierGroupId, name])
+  @@index([modifierGroupId, sortOrder, createdAt])
+  @@index([modifierGroupId, isActive])
+}
+
+model ProductModifierGroupLink {
+  id              String        @id @default(cuid())
+  productId       String
+  modifierGroupId String
+  isRequired      Boolean       @default(false)
+  sortOrder       Int           @default(0)
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([productId, modifierGroupId])
+  @@index([productId, sortOrder, createdAt])
+  @@index([modifierGroupId])
+}
+
+model BranchPriceOverride {
+  id        String          @id @default(cuid())
+  branchId  String
+  productId String
+  variantId String?
+  price     Decimal         @db.Decimal(12, 2)
+  branch    Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([branchId, productId, variantId])
+  @@index([branchId, productId])
+}
+
+model Station {
+  id                    String                 @id @default(cuid())
+  branchId              String
+  name                  String
+  code                  String
+  stationType           StationType
+  sortOrder             Int                    @default(0)
+  isActive              Boolean                @default(true)
+  branch                Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productRoutes         ProductStationRoute[]
+  orderItems            OrderItem[]
+  productionTickets     ProductionTicket[]
+  productionTicketItems ProductionTicketItem[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@unique([branchId, name])
+  @@unique([branchId, code])
+  @@index([branchId, stationType, isActive])
+  @@index([branchId, sortOrder, createdAt])
+}
+
+model ProductStationRoute {
+  id        String   @id @default(cuid())
+  branchId  String
+  productId String   @unique
+  stationId String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  station   Station  @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, stationId])
+  @@index([branchId, productId])
+}
+
+model ProductionTicket {
+  id             String                 @id @default(cuid())
+  branchId       String
+  stationId      String
+  orderId        String
+  tableSessionId String?
+  serviceType    ServiceType
+  status         ProductionTicketStatus @default(OPEN)
+  branch         Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  station        Station                @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  order          Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  tableSession   TableSession?          @relation(fields: [tableSessionId], references: [id], onDelete: SetNull)
+  items          ProductionTicketItem[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([branchId, stationId, status, createdAt])
+  @@index([orderId, createdAt])
+  @@index([tableSessionId])
+}
+
+model ProductionTicketItem {
+  id                  String                     @id @default(cuid())
+  productionTicketId  String
+  orderItemId         String
+  orderId             String
+  branchId            String
+  stationId           String
+  productNameSnapshot String
+  variantNameSnapshot String?
+  notesSnapshot       String?
+  quantity            Decimal                    @db.Decimal(10, 3)
+  status              ProductionTicketItemStatus @default(QUEUED)
+  firedAt             DateTime
+  startedAt           DateTime?
+  readyAt             DateTime?
+  completedAt         DateTime?
+  productionTicket    ProductionTicket           @relation(fields: [productionTicketId], references: [id], onDelete: Restrict)
+  orderItem           OrderItem                  @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  order               Order                      @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  branch              Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  station             Station                    @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+
+  @@index([branchId, stationId, status, firedAt])
+  @@index([productionTicketId, status, createdAt])
+  @@index([orderId, status])
+  @@index([orderItemId])
+}
