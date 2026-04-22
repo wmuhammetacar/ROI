@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { catalogCategoriesApi } from '../../api/catalog-categories.api';
+import { catalogProductsApi } from '../../api/catalog-products.api';
 import type { Category } from '../../api/catalog-types';
 import { toErrorMessage } from '../../app/error-utils';
 import { DataState, Modal, PageHeader, SectionCard, StatusBadge } from '../../components';
@@ -13,6 +14,7 @@ const emptyCategoryForm = {
 
 export function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [productCounts, setProductCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -31,8 +33,16 @@ export function CategoriesPage() {
     setError(null);
 
     try {
-      const data = await catalogCategoriesApi.list();
-      setCategories(data);
+      const [categoryData, productData] = await Promise.all([
+        catalogCategoriesApi.list(),
+        catalogProductsApi.list(),
+      ]);
+      setCategories(categoryData);
+      const counts = productData.reduce<Record<string, number>>((acc, product) => {
+        acc[product.categoryId] = (acc[product.categoryId] ?? 0) + 1;
+        return acc;
+      }, {});
+      setProductCounts(counts);
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
@@ -135,6 +145,7 @@ export function CategoriesPage() {
                 <tr>
                   <th>Name</th>
                   <th>Description</th>
+                  <th>Product Count</th>
                   <th>Sort</th>
                   <th>Status</th>
                   <th></th>
@@ -145,6 +156,7 @@ export function CategoriesPage() {
                   <tr key={category.id}>
                     <td>{category.name}</td>
                     <td className="muted">{category.description ?? '—'}</td>
+                    <td>{productCounts[category.id] ?? 0}</td>
                     <td>{category.sortOrder}</td>
                     <td>
                       <StatusBadge active={category.isActive} />

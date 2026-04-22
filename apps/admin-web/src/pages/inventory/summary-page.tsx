@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { inventoryIngredientsApi, inventorySummaryApi } from '../../api';
 import type { InventorySummary, InventorySummaryItem } from '../../api/inventory-types';
 import { toErrorMessage } from '../../app/error-utils';
-import { DataState, Modal, PageHeader, SectionCard, StatusBadge } from '../../components';
+import { DataState, MetricCard, Modal, PageHeader, SectionCard, StatusBadge } from '../../components';
 
 const emptyAdjustForm = {
   adjustmentType: 'PLUS' as 'PLUS' | 'MINUS',
@@ -20,6 +20,10 @@ function formatStock(value: string | number) {
   const amount = Number(value ?? 0);
   if (Number.isNaN(amount)) return '0';
   return amount.toLocaleString('tr-TR', { maximumFractionDigits: 3 });
+}
+
+function isLowStock(item: InventorySummaryItem) {
+  return Number(item.lowStockThreshold) > 0 && Number(item.currentStock) <= Number(item.lowStockThreshold);
 }
 
 export function InventorySummaryPage() {
@@ -127,6 +131,14 @@ export function InventorySummaryPage() {
       />
 
       <SectionCard>
+        {summary ? (
+          <div className="metric-grid">
+            <MetricCard label="Ingredients" value={`${summary.totalIngredients}`} />
+            <MetricCard label="Low Stock" value={`${summary.lowStockCount}`} helper={summary.lowStockCount > 0 ? 'Action required' : 'Healthy'} />
+            <MetricCard label="Recent Moves (24h)" value={`${summary.recentMovementCount24h}`} />
+            <MetricCard label="Recipe Coverage" value={`${summary.recipeCoverageCount}`} />
+          </div>
+        ) : null}
         <DataState
           isLoading={isLoading}
           error={error}
@@ -141,6 +153,8 @@ export function InventorySummaryPage() {
                   <th>Ingredient</th>
                   <th>Unit</th>
                   <th>Current Stock</th>
+                  <th>Low Stock Threshold</th>
+                  <th>Risk</th>
                   <th>Status</th>
                   <th>Latest Movement</th>
                   <th></th>
@@ -160,6 +174,14 @@ export function InventorySummaryPage() {
                       {formatStock(ingredient.currentStock)} {ingredient.unit?.code ?? ''}
                     </td>
                     <td>
+                      {Number(ingredient.lowStockThreshold) > 0
+                        ? `${formatStock(ingredient.lowStockThreshold)} ${ingredient.unit?.code ?? ''}`
+                        : '—'}
+                    </td>
+                    <td>
+                      {isLowStock(ingredient) ? <span className="status-chip warn">Low</span> : <span className="status-chip ok">Healthy</span>}
+                    </td>
+                    <td>
                       <StatusBadge active={ingredient.isActive} />
                     </td>
                     <td className="muted">
@@ -175,7 +197,7 @@ export function InventorySummaryPage() {
                         Waste
                       </button>
                       <Link className="secondary" to={`/inventory/ingredients?ingredientId=${ingredient.id}`}>
-                        Details
+                        Detail
                       </Link>
                       <Link className="secondary" to={`/inventory/movements?ingredientId=${ingredient.id}`}>
                         Movements
@@ -252,7 +274,7 @@ export function InventorySummaryPage() {
               />
             </label>
             <label>
-              Reason
+              Reason (Waste / Fire)
               <textarea
                 value={wasteForm.reason}
                 onChange={(event) => setWasteForm((prev) => ({ ...prev, reason: event.target.value }))}

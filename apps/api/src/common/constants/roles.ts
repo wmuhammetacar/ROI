@@ -1,5 +1,6 @@
 export const APP_ROLES = {
   ADMIN: 'admin',
+  MANAGER: 'manager',
   CASHIER: 'cashier',
   WAITER: 'waiter',
   PRODUCTION: 'production',

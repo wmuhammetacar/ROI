@@ -13,6 +13,7 @@ export interface CreateProductPayload {
   categoryId: string;
   name: string;
   description?: string;
+  allergenTags?: string[];
   sku?: string;
   imageUrl?: string;
   basePrice: number;
@@ -26,6 +27,7 @@ export interface UpdateProductPayload {
   categoryId?: string;
   name?: string;
   description?: string;
+  allergenTags?: string[];
   sku?: string;
   imageUrl?: string;
   basePrice?: number;
@@ -127,6 +129,21 @@ export function createCatalogProductsApi(client: ApiClient) {
     },
     removeModifierLink(productId: string, linkId: string) {
       return client.delete<ApiDeleteResponse>(`/products/${productId}/modifier-groups/${linkId}`);
+    },
+    createStationRoute(productId: string, payload: { stationId: string }) {
+      return client.post<{ id: string; productId: string; stationId: string; station?: { id: string; name: string; code: string } }>(
+        `/products/${productId}/station-route`,
+        payload,
+      );
+    },
+    updateStationRoute(productId: string, payload: { stationId: string }) {
+      return client.patch<{ id: string; productId: string; stationId: string; station?: { id: string; name: string; code: string } }>(
+        `/products/${productId}/station-route`,
+        payload,
+      );
+    },
+    removeStationRoute(productId: string) {
+      return client.delete<ApiDeleteResponse>(`/products/${productId}/station-route`);
     },
   };
 }

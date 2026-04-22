@@ -48,6 +48,8 @@ Recommended quick setup:
 cp .env.example .env
 ```
 
+Default local API port is `3002` and frontend env examples target `http://localhost:3002/api/v1`.
+
 For browser-based apps, keep `CORS_ORIGINS` aligned with your frontend dev ports.
 
 Frontend app env examples:
@@ -80,7 +82,11 @@ pnpm run prisma:generate
 pnpm run prisma:migrate
 pnpm run prisma:deploy
 pnpm run prisma:seed
+pnpm run smoke:phase10
 ```
+
+`pnpm run dev:all` starts API + admin + POS + kitchen display + QR apps together.
+It enables polling watchers by default to avoid Linux `ENOSPC` file-watch limit failures.
 
 ## Backend Notes (`apps/api`)
 
@@ -93,6 +99,13 @@ Local API run:
 ```bash
 pnpm --filter @roi/api start:dev
 ```
+
+## Operations Docs
+
+- Pre-production readiness package: `docs/preproduction-readiness.md`
+- Operations runbook foundation: `docs/operations-runbook.md`
+- Final launch smoke proof: `docs/smoke/phase10-launch-proof.md`
+- Final launch checklist: `docs/launch-checklist.md`
 
 ## Production Hardening Notes
 
@@ -110,15 +123,18 @@ pnpm --filter @roi/api start:dev
 ## Deployment Checklist (Minimal)
 
 1. Set `NODE_ENV=production`.
-2. Configure `DATABASE_URL`, strong `JWT_SECRET`, and explicit `CORS_ORIGINS`.
-3. Optionally configure `REALTIME_ALLOWED_ORIGINS` separately.
-4. Review throttling env values for expected traffic.
-5. Run:
+2. Set `INTERNAL_NETWORK_ENFORCE=true` for venue network policy.
+3. Configure `DATABASE_URL`, strong `JWT_SECRET`, and explicit `CORS_ORIGINS`.
+4. Optionally configure `REALTIME_ALLOWED_ORIGINS` separately.
+5. Review throttling env values for expected traffic.
+6. Run:
    - `pnpm run build`
    - `pnpm run prisma:deploy`
-6. Verify:
+7. Verify:
    - `GET /api/v1/health` returns `up`
    - `GET /api/v1/ready` returns `ready`
+8. Run final launch smoke:
+   - `pnpm run smoke:phase10`
 
 ## Operations / Backup Foundation
 

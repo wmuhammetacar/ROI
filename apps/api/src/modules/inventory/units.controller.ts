@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
 import { InventoryService } from './inventory.service';
@@ -26,17 +27,17 @@ export class UnitsController {
   }
 
   @Get(':id')
-  findById(@Param('id') id: string) {
+  findById(@Param('id', ParseCuidPipe) id: string) {
     return this.inventoryService.getUnitById(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateUnitDto, @CurrentUser() user: AuthUser) {
+  update(@Param('id', ParseCuidPipe) id: string, @Body() dto: UpdateUnitDto, @CurrentUser() user: AuthUser) {
     return this.inventoryService.updateUnit(id, user.sub, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  remove(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.inventoryService.deleteUnit(id, user.sub);
   }
 }

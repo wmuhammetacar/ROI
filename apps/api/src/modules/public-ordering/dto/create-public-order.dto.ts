@@ -1,13 +1,16 @@
 import { Type } from 'class-transformer';
 import { ArrayMinSize, IsArray, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { IsCuid } from '../../../common/validators/is-cuid.decorator';
 import { PublicOrderItemDto } from './public-order-item.dto';
 
 export class CreatePublicOrderDto {
   @IsString()
+  @IsCuid()
   branchId!: string;
 
   @IsOptional()
   @IsString()
+  @IsCuid()
   tableId?: string;
 
   @IsOptional()

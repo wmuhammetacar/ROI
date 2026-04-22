@@ -1,4 +1,5 @@
 import { IsBoolean, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { IsCuid } from '../../../common/validators/is-cuid.decorator';
 
 export class UpdateMenuMappingDto {
   @IsOptional()
@@ -11,6 +12,7 @@ export class UpdateMenuMappingDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @IsCuid()
   productId?: string;
 
   @IsOptional()
@@ -18,6 +20,7 @@ export class UpdateMenuMappingDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @IsCuid()
   variantId?: string | null;
 
   @IsOptional()

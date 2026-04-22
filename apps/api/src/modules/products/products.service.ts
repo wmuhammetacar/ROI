@@ -40,6 +40,7 @@ export class ProductsService {
         categoryId: dto.categoryId,
         name,
         description: dto.description,
+        allergenTags: this.normalizeAllergenTags(dto.allergenTags),
         sku: dto.sku,
         imageUrl: dto.imageUrl,
         basePrice: new Prisma.Decimal(dto.basePrice),
@@ -70,6 +71,18 @@ export class ProductsService {
       },
       include: {
         category: true,
+        stationRoute: {
+          include: {
+            station: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                isActive: true,
+              },
+            },
+          },
+        },
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -104,6 +117,18 @@ export class ProductsService {
           },
           orderBy: [{ variantId: 'asc' }, { createdAt: 'asc' }],
         },
+        stationRoute: {
+          include: {
+            station: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                isActive: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -136,6 +161,10 @@ export class ProductsService {
 
     if (dto.description !== undefined) {
       updateData.description = dto.description;
+    }
+
+    if (dto.allergenTags !== undefined) {
+      updateData.allergenTags = this.normalizeAllergenTags(dto.allergenTags);
     }
 
     if (dto.sku !== undefined) {
@@ -704,5 +733,21 @@ export class ProductsService {
     if (existing) {
       throw new BadRequestException('Variant name already exists for this product');
     }
+  }
+
+  private normalizeAllergenTags(allergenTags: string[] | undefined): string[] {
+    if (!allergenTags || allergenTags.length === 0) {
+      return [];
+    }
+
+    const unique = new Set<string>();
+    for (const tag of allergenTags) {
+      const normalized = tag.trim();
+      if (!normalized) {
+        continue;
+      }
+      unique.add(normalized);
+    }
+    return Array.from(unique);
   }
 }

@@ -1,4 +1,5 @@
-import { IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsNumber, IsOptional, IsString, Matches, MaxLength, Min, MinLength } from 'class-validator';
 
 export class UpdateIngredientDto {
   @IsOptional()
@@ -19,4 +20,10 @@ export class UpdateIngredientDto {
   @MinLength(1)
   @MaxLength(100)
   unitId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  lowStockThreshold?: number;
 }

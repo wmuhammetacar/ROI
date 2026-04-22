@@ -16,6 +16,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { PricingService } from '../pricing/pricing.service';
 import { CreateBranchPriceOverrideDto } from '../pricing/dto/create-branch-price-override.dto';
@@ -54,27 +55,27 @@ export class ProductsController {
 
   @Get(':id')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
-  async findById(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findById(@Param('id', ParseCuidPipe) id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.productsService.findById(branchId, id);
   }
 
   @Patch(':id')
   @Roles(APP_ROLES.ADMIN)
-  update(@Param('id') id: string, @Body() dto: UpdateProductDto, @CurrentUser() user: AuthUser) {
+  update(@Param('id', ParseCuidPipe) id: string, @Body() dto: UpdateProductDto, @CurrentUser() user: AuthUser) {
     return this.productsService.update(user.branchId, id, user.sub, dto);
   }
 
   @Delete(':id')
   @Roles(APP_ROLES.ADMIN)
-  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  remove(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.productsService.remove(user.branchId, id, user.sub);
   }
 
   @Patch(':id/availability')
   @Roles(APP_ROLES.ADMIN)
   updateAvailability(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateProductAvailabilityDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -84,7 +85,7 @@ export class ProductsController {
   @Patch(':id/active-state')
   @Roles(APP_ROLES.ADMIN)
   updateActiveState(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateProductActiveStateDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -94,7 +95,7 @@ export class ProductsController {
   @Post(':id/variants')
   @Roles(APP_ROLES.ADMIN)
   createVariant(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: CreateProductVariantDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -103,7 +104,7 @@ export class ProductsController {
 
   @Get(':id/variants')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
-  async findVariants(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findVariants(@Param('id', ParseCuidPipe) id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.productsService.findVariants(branchId, id);
   }
@@ -111,8 +112,8 @@ export class ProductsController {
   @Patch(':id/variants/:variantId')
   @Roles(APP_ROLES.ADMIN)
   updateVariant(
-    @Param('id') id: string,
-    @Param('variantId') variantId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('variantId', ParseCuidPipe) variantId: string,
     @Body() dto: UpdateProductVariantDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -122,8 +123,8 @@ export class ProductsController {
   @Delete(':id/variants/:variantId')
   @Roles(APP_ROLES.ADMIN)
   removeVariant(
-    @Param('id') id: string,
-    @Param('variantId') variantId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('variantId', ParseCuidPipe) variantId: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.productsService.removeVariant(user.branchId, id, variantId, user.sub);
@@ -132,7 +133,7 @@ export class ProductsController {
   @Post(':id/modifier-groups')
   @Roles(APP_ROLES.ADMIN)
   createModifierGroupLink(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: CreateProductModifierGroupLinkDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -142,7 +143,7 @@ export class ProductsController {
   @Get(':id/modifier-groups')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
   async findModifierGroupLinks(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Query() query: ReadBranchScopeQueryDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -153,8 +154,8 @@ export class ProductsController {
   @Patch(':id/modifier-groups/:linkId')
   @Roles(APP_ROLES.ADMIN)
   updateModifierGroupLink(
-    @Param('id') id: string,
-    @Param('linkId') linkId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('linkId', ParseCuidPipe) linkId: string,
     @Body() dto: UpdateProductModifierGroupLinkDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -164,8 +165,8 @@ export class ProductsController {
   @Delete(':id/modifier-groups/:linkId')
   @Roles(APP_ROLES.ADMIN)
   removeModifierGroupLink(
-    @Param('id') id: string,
-    @Param('linkId') linkId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('linkId', ParseCuidPipe) linkId: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.productsService.removeModifierGroupLink(user.branchId, id, linkId, user.sub);
@@ -174,7 +175,7 @@ export class ProductsController {
   @Post(':id/prices')
   @Roles(APP_ROLES.ADMIN)
   createPriceOverride(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: CreateBranchPriceOverrideDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -184,7 +185,7 @@ export class ProductsController {
   @Get(':id/prices')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
   async findPriceOverrides(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Query() query: ReadBranchScopeQueryDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -195,8 +196,8 @@ export class ProductsController {
   @Patch(':id/prices/:priceId')
   @Roles(APP_ROLES.ADMIN)
   updatePriceOverride(
-    @Param('id') id: string,
-    @Param('priceId') priceId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('priceId', ParseCuidPipe) priceId: string,
     @Body() dto: UpdateBranchPriceOverrideDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -206,8 +207,8 @@ export class ProductsController {
   @Delete(':id/prices/:priceId')
   @Roles(APP_ROLES.ADMIN)
   removePriceOverride(
-    @Param('id') id: string,
-    @Param('priceId') priceId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('priceId', ParseCuidPipe) priceId: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.pricingService.deleteOverride(user.branchId, id, priceId, user.sub);

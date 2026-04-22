@@ -25,6 +25,7 @@ import {
   deriveOrderStatusFromProduction,
   deriveProductionTicketStatus,
 } from './domain/production.rules';
+import { PrinterRoutingService } from './printer-routing.service';
 
 @Injectable()
 export class ProductionService {
@@ -32,6 +33,7 @@ export class ProductionService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly realtimeEvents: RealtimeEventsService,
+    private readonly printerRouting: PrinterRoutingService,
   ) {}
 
   async sendOrderToStation(branchId: string, actor: AuthUser, orderId: string) {
@@ -71,14 +73,13 @@ export class ProductionService {
       throw new BadRequestException('Order has no active items to send');
     }
 
-    const manualItems = order.items.filter((item) => !item.productId);
-    if (manualItems.length > 0) {
+    const unfiredItems = order.items.filter((item) => item.productionTicketItems.length === 0);
+    const manualItemsWithoutStation = unfiredItems.filter((item) => !item.productId && !item.stationId);
+    if (manualItemsWithoutStation.length > 0) {
       throw new BadRequestException(
-        `Order contains unsendable manual items: ${manualItems.map((item) => item.id).join(', ')}`,
+        `Manual items must include station before dispatch: ${manualItemsWithoutStation.map((item) => item.id).join(', ')}`,
       );
     }
-
-    const unfiredItems = order.items.filter((item) => item.productionTicketItems.length === 0);
 
     if (unfiredItems.length === 0) {
       throw new ConflictException('No unfired eligible items found for station dispatch');
@@ -92,7 +93,8 @@ export class ProductionService {
       ),
     );
 
-    const routes = await this.prisma.productStationRoute.findMany({
+    const routes = productIds.length
+      ? await this.prisma.productStationRoute.findMany({
       where: {
         branchId,
         productId: {
@@ -104,12 +106,14 @@ export class ProductionService {
           select: {
             id: true,
             name: true,
+            code: true,
             isActive: true,
             branchId: true,
           },
         },
       },
-    });
+    })
+      : [];
 
     const routeByProductId = new Map(routes.map((route) => [route.productId, route]));
 
@@ -132,20 +136,82 @@ export class ProductionService {
       }
     }
 
+    const explicitStationIds = Array.from(
+      new Set(
+        unfiredItems
+          .map((item) => item.stationId)
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const explicitStations = explicitStationIds.length
+      ? await this.prisma.station.findMany({
+          where: {
+            branchId,
+            id: {
+              in: explicitStationIds,
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            isActive: true,
+            branchId: true,
+          },
+        })
+      : [];
+
+    if (explicitStations.length !== explicitStationIds.length) {
+      throw new ConflictException('Order item station reference is invalid for current branch');
+    }
+
+    for (const station of explicitStations) {
+      if (!station.isActive) {
+        throw new ConflictException(`Station ${station.name} is inactive and cannot receive production items`);
+      }
+    }
+
     const groupedByStation = new Map<string, typeof unfiredItems>();
+    const stationInfoById = new Map<
+      string,
+      {
+        id: string;
+        code: string;
+        name: string;
+      }
+    >();
+
+    for (const route of routes) {
+      stationInfoById.set(route.station.id, {
+        id: route.station.id,
+        code: route.station.code,
+        name: route.station.name,
+      });
+    }
+
+    for (const station of explicitStations) {
+      stationInfoById.set(station.id, {
+        id: station.id,
+        code: station.code,
+        name: station.name,
+      });
+    }
 
     for (const item of unfiredItems) {
-      const route = routeByProductId.get(item.productId!);
-
-      if (!route) {
+      const stationId = item.stationId ?? routeByProductId.get(item.productId!)?.stationId;
+      if (!stationId) {
         throw new BadRequestException(`No station route found for productId ${item.productId}`);
       }
+      if (!stationInfoById.has(stationId)) {
+        throw new ConflictException('Resolved station is not available for dispatch');
+      }
 
-      const current = groupedByStation.get(route.stationId);
+      const current = groupedByStation.get(stationId);
       if (current) {
         current.push(item);
       } else {
-        groupedByStation.set(route.stationId, [item]);
+        groupedByStation.set(stationId, [item]);
       }
     }
 
@@ -318,7 +384,30 @@ export class ProductionService {
       tickets: dispatchResult.createdTickets,
     });
 
+    this.realtimeEvents.emitToBranch(branchId, REALTIME_EVENTS.ORDER_SENT, {
+      orderId: order.id,
+      status: refreshedOrder?.status ?? OrderStatus.SENT_TO_STATION,
+      ticketCount: dispatchResult.createdTickets.length,
+      itemCount: dispatchResult.createdTickets.reduce((acc, row) => acc + row.itemCount, 0),
+      tickets: dispatchResult.createdTickets,
+    });
+
     for (const ticket of dispatchResult.createdTickets) {
+      const stationInfo = stationInfoById.get(ticket.stationId);
+      const ticketDetails = refreshedOrder?.productionTickets.find((item) => item.id === ticket.ticketId);
+      if (stationInfo && ticketDetails) {
+        await this.printerRouting.printTicket(
+          branchId,
+          ticket.stationId,
+          stationInfo.code,
+          ticketDetails.items.map((item) => ({
+            productName: item.productNameSnapshot,
+            quantity: item.quantity.toString(),
+            note: item.notesSnapshot,
+          })),
+        );
+      }
+
       this.realtimeEvents.emitToBranch(branchId, REALTIME_EVENTS.PRODUCTION_TICKET_CREATED, {
         orderId: order.id,
         ticketId: ticket.ticketId,

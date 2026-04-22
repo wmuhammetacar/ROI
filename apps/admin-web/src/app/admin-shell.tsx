@@ -6,6 +6,11 @@ import { BranchIndicator, BranchSwitcher } from '../components';
 
 const navItems: AppNavItem[] = [
   { path: '/dashboard', label: 'Dashboard' },
+  { path: '/operations', label: 'Operations' },
+  { path: '/operations/staff', label: 'Staff' },
+  { path: '/operations/printers', label: 'Printers' },
+  { path: '/operations/network', label: 'Network Access' },
+  { path: '/operations/customers', label: 'Customer Desk' },
   { path: '/branches', label: 'Branches' },
   { path: '/catalog/categories', label: 'Catalog' },
   { path: '/orders', label: 'Orders' },

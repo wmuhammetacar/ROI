@@ -4,8 +4,13 @@ import type { PosCatalogResponse } from './pos-types';
 
 export function createPosCatalogApi(client: ApiClient) {
   return {
-    getPosProducts() {
-      return client.get<PosCatalogResponse>('/catalog/pos-products');
+    getPosProducts(query?: { routeSafe?: boolean }) {
+      const params = new URLSearchParams();
+      if (query?.routeSafe !== undefined) {
+        params.set('routeSafe', String(query.routeSafe));
+      }
+      const suffix = params.toString();
+      return client.get<PosCatalogResponse>(`/catalog/pos-products${suffix ? `?${suffix}` : ''}`);
     },
   };
 }

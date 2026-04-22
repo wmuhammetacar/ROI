@@ -37,6 +37,7 @@ export function InventoryRecipesPage() {
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [formState, setFormState] = useState(emptyRecipeForm);
@@ -47,7 +48,16 @@ export function InventoryRecipesPage() {
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [editingItem, setEditingItem] = useState<RecipeItem | null>(null);
 
-  const sortedRecipes = useMemo(() => [...recipes].sort((a, b) => a.name.localeCompare(b.name)), [recipes]);
+  const sortedRecipes = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return [...recipes]
+      .filter((recipe) => {
+        if (!term) return true;
+        const targetLabel = getRecipeTargetLabel(recipe).toLowerCase();
+        return recipe.name.toLowerCase().includes(term) || targetLabel.includes(term);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [recipes, searchTerm]);
 
   const loadBaseData = async () => {
     setIsLoading(true);
@@ -239,13 +249,26 @@ export function InventoryRecipesPage() {
       />
 
       <SectionCard>
+        <div className="table-toolbar">
+          <label className="inline-field">
+            Search
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Recipe or product/variant"
+            />
+          </label>
+          <button type="button" className="secondary" onClick={loadBaseData}>
+            Refresh
+          </button>
+        </div>
         <DataState
           isLoading={isLoading}
           error={error}
-          empty={!isLoading && recipes.length === 0}
+          empty={!isLoading && sortedRecipes.length === 0}
           emptyMessage="No recipes yet. Create one to enable stock deduction."
         />
-        {!isLoading && recipes.length > 0 ? (
+        {!isLoading && sortedRecipes.length > 0 ? (
           <div className="table-wrap">
             <table className="data-table">
               <thead>

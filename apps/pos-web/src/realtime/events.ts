@@ -1,8 +1,10 @@
 export const POS_REALTIME_EVENTS = {
   ORDER_CREATED: 'order.created',
+  ORDER_SENT: 'order.sent',
   ORDER_UPDATED: 'order.updated',
   ORDER_SENT_TO_STATION: 'order.sent_to_station',
   ORDER_STATUS_CHANGED: 'order.status_changed',
+  TABLE_UPDATED: 'table.updated',
   PRODUCTION_TICKET_CREATED: 'production.ticket.created',
   PRODUCTION_ITEM_UPDATED: 'production.item.updated',
   PAYMENT_RECORDED: 'payment.recorded',
@@ -18,4 +20,3 @@ export interface PosRealtimeEventEnvelope<TPayload = Record<string, unknown>> {
   occurredAt: string;
   payload: TPayload;
 }
-

@@ -3,6 +3,7 @@ import { adminApiClient } from './client';
 import { appendBranchScope, withQuery } from './branch-scope';
 import type {
   InventoryDeleteResponse,
+  IngredientDetail,
   Ingredient,
   StockMovement,
   WasteRecord,
@@ -10,6 +11,8 @@ import type {
 
 export interface ListIngredientsQuery {
   isActive?: boolean;
+  lowStockOnly?: boolean;
+  q?: string;
   limit?: number;
 }
 
@@ -18,6 +21,7 @@ export interface CreateIngredientPayload {
   sku?: string;
   unitId: string;
   currentStock: number;
+  lowStockThreshold?: number;
   isActive?: boolean;
 }
 
@@ -25,6 +29,7 @@ export interface UpdateIngredientPayload {
   name?: string;
   sku?: string;
   unitId?: string;
+  lowStockThreshold?: number;
 }
 
 export interface UpdateIngredientActivePayload {
@@ -55,12 +60,18 @@ export function createInventoryIngredientsApi(client: ApiClient) {
     list(query?: ListIngredientsQuery, branchId?: string) {
       const params = appendBranchScope(undefined, branchId);
       if (query?.isActive !== undefined) params.set('isActive', String(query.isActive));
+      if (query?.lowStockOnly !== undefined) params.set('lowStockOnly', String(query.lowStockOnly));
+      if (query?.q?.trim()) params.set('q', query.q.trim());
       if (query?.limit) params.set('limit', String(query.limit));
       return client.get<Ingredient[]>(withQuery('/ingredients', params));
     },
     getById(id: string, branchId?: string) {
       const params = appendBranchScope(undefined, branchId);
       return client.get<Ingredient>(withQuery(`/ingredients/${id}`, params));
+    },
+    getDetail(id: string, branchId?: string) {
+      const params = appendBranchScope(undefined, branchId);
+      return client.get<IngredientDetail>(withQuery(`/ingredients/${id}/detail`, params));
     },
     create(payload: CreateIngredientPayload) {
       return client.post<Ingredient>('/ingredients', payload);

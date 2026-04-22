@@ -8,7 +8,7 @@ import { logSafeRuntimeSummary, resolveCorsOrigins } from './config/runtime.conf
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT', 3000);
+  const port = configService.get<number>('PORT', 3002);
   const corsOrigins = resolveCorsOrigins(configService);
   const trustProxy = configService.get<boolean>('TRUST_PROXY', false);
 

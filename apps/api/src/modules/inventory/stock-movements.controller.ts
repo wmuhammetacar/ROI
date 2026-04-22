@@ -11,7 +11,7 @@ import { InventoryService } from './inventory.service';
 
 @Controller('stock-movements')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(APP_ROLES.ADMIN)
+@Roles(APP_ROLES.ADMIN, APP_ROLES.MANAGER, APP_ROLES.CASHIER)
 export class StockMovementsController {
   constructor(
     private readonly inventoryService: InventoryService,

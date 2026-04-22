@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { ReadBranchScopeQueryDto } from '../../common/dto/read-branch-scope-query.dto';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { CreateOrderPaymentDto } from './dto/create-order-payment.dto';
@@ -20,14 +21,14 @@ export class OrderPaymentsController {
 
   @Post(':id/bill')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER)
-  bill(@Param('id') orderId: string, @CurrentUser() user: AuthUser) {
+  bill(@Param('id', ParseCuidPipe) orderId: string, @CurrentUser() user: AuthUser) {
     return this.paymentsService.billOrder(user.branchId, user, orderId);
   }
 
   @Post(':id/payments')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER)
   createPayment(
-    @Param('id') orderId: string,
+    @Param('id', ParseCuidPipe) orderId: string,
     @Body() dto: CreateOrderPaymentDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -37,7 +38,7 @@ export class OrderPaymentsController {
   @Get(':id/payments')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
   async getOrderPayments(
-    @Param('id') orderId: string,
+    @Param('id', ParseCuidPipe) orderId: string,
     @Query() query: ReadBranchScopeQueryDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -48,7 +49,7 @@ export class OrderPaymentsController {
   @Get(':id/refunds')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
   async getOrderRefunds(
-    @Param('id') orderId: string,
+    @Param('id', ParseCuidPipe) orderId: string,
     @Query() query: ReadBranchScopeQueryDto,
     @CurrentUser() user: AuthUser,
   ) {

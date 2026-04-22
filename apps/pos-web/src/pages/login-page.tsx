@@ -9,9 +9,12 @@ export function LoginPage() {
   const location = useLocation();
 
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [pin, setPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [method, setMethod] = useState<'pin' | 'password'>('pin');
 
   const redirectPath = useMemo(() => {
     const nextPath = (location.state as { from?: string } | null)?.from;
@@ -28,7 +31,13 @@ export function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login({ email, password });
+      await login(
+        method === 'pin'
+          ? { username, pin }
+          : username
+            ? { username, password }
+            : { email, password },
+      );
       navigate(redirectPath, { replace: true });
     } catch (submissionError) {
       if (submissionError instanceof ApiError) {
@@ -48,18 +57,38 @@ export function LoginPage() {
         <p className="muted">Touch-ready ordering shell</p>
 
         <label>
-          Email
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          Login Type
+          <select value={method} onChange={(event) => setMethod(event.target.value as 'pin' | 'password')}>
+            <option value="pin">Username + PIN</option>
+            <option value="password">Username + Password</option>
+          </select>
         </label>
 
         <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
+          Username
+          <input value={username} onChange={(event) => setUsername(event.target.value)} required />
+        </label>
+
+        {method === 'pin' ? (
+          <label>
+            PIN
+            <input value={pin} onChange={(event) => setPin(event.target.value)} inputMode="numeric" required />
+          </label>
+        ) : (
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+        )}
+
+        <label>
+          Email (legacy fallback)
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
         </label>
 
         {error ? <p className="error">{error}</p> : null}

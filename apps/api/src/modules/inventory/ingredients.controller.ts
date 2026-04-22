@@ -6,6 +6,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { CreateIngredientDto } from './dto/create-ingredient.dto';
@@ -19,7 +20,7 @@ import { InventoryService } from './inventory.service';
 
 @Controller('ingredients')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(APP_ROLES.ADMIN)
+@Roles(APP_ROLES.ADMIN, APP_ROLES.MANAGER, APP_ROLES.CASHIER)
 export class IngredientsController {
   constructor(
     private readonly inventoryService: InventoryService,
@@ -38,24 +39,34 @@ export class IngredientsController {
   }
 
   @Get(':id')
-  async findById(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findById(@Param('id', ParseCuidPipe) id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.inventoryService.getIngredientById(branchId, id);
   }
 
+  @Get(':id/detail')
+  async getDetail(
+    @Param('id', ParseCuidPipe) id: string,
+    @Query() query: ReadBranchScopeQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
+    return this.inventoryService.getIngredientDetail(branchId, id);
+  }
+
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateIngredientDto, @CurrentUser() user: AuthUser) {
+  update(@Param('id', ParseCuidPipe) id: string, @Body() dto: UpdateIngredientDto, @CurrentUser() user: AuthUser) {
     return this.inventoryService.updateIngredient(user.branchId, id, user.sub, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  remove(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.inventoryService.deleteIngredient(user.branchId, id, user.sub);
   }
 
   @Patch(':id/active-state')
   updateActiveState(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateIngredientActiveStateDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -63,18 +74,18 @@ export class IngredientsController {
   }
 
   @Post(':id/adjust-stock')
-  adjustStock(@Param('id') id: string, @Body() dto: AdjustStockDto, @CurrentUser() user: AuthUser) {
+  adjustStock(@Param('id', ParseCuidPipe) id: string, @Body() dto: AdjustStockDto, @CurrentUser() user: AuthUser) {
     return this.inventoryService.adjustIngredientStock(user.branchId, id, user.sub, dto);
   }
 
   @Post(':id/waste')
-  createWaste(@Param('id') id: string, @Body() dto: CreateWasteRecordDto, @CurrentUser() user: AuthUser) {
+  createWaste(@Param('id', ParseCuidPipe) id: string, @Body() dto: CreateWasteRecordDto, @CurrentUser() user: AuthUser) {
     return this.inventoryService.createWasteRecord(user.branchId, id, user.sub, dto);
   }
 
   @Get(':id/waste-records')
   async listWasteRecords(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Query() query: ListIngredientWasteRecordsDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -84,7 +95,7 @@ export class IngredientsController {
 
   @Get(':id/stock-movements')
   async listStockMovements(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Query() query: ListIngredientStockMovementsDto,
     @CurrentUser() user: AuthUser,
   ) {

@@ -11,6 +11,12 @@ export class AddOrderItemDto {
   @IsString()
   productId?: string;
 
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(40)
+  stationCode?: string;
+
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 3 })
   @Min(0.001)

@@ -49,8 +49,12 @@ export function resolveRealtimeAllowedOrigins(configService: ConfigService): str
 
 export function logSafeRuntimeSummary(configService: ConfigService, logger: Logger) {
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
-  const port = configService.get<number>('PORT', 3000);
+  const port = configService.get<number>('PORT', 3002);
   const trustProxy = configService.get<boolean>('TRUST_PROXY', false);
+  const internalNetworkEnforce = configService.get<boolean>(
+    'INTERNAL_NETWORK_ENFORCE',
+    nodeEnv === 'production',
+  );
   const rateLimitTtl = configService.get<number>('RATE_LIMIT_TTL_SECONDS', 60);
   const rateLimitMax = configService.get<number>('RATE_LIMIT_MAX', 200);
   const corsOrigins = resolveCorsOrigins(configService);
@@ -58,8 +62,8 @@ export function logSafeRuntimeSummary(configService: ConfigService, logger: Logg
 
   logger.log(
     `Runtime config: env=${nodeEnv} port=${port} trustProxy=${String(trustProxy)} ` +
+      `internalNetworkEnforce=${String(internalNetworkEnforce)} ` +
       `rateLimit=${rateLimitMax}/${rateLimitTtl}s corsOrigins=${corsOrigins.length} realtimeOrigins=${realtimeOrigins.length}`,
     'Bootstrap',
   );
 }
-

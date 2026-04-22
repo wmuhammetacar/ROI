@@ -12,9 +12,11 @@ import { OrdersService } from '../orders/orders.service';
 import { OpenTableSessionDto } from '../table-sessions/dto/open-table-session.dto';
 import { TableSessionsService } from '../table-sessions/table-sessions.service';
 import { CreatePublicOrderDto } from './dto/create-public-order.dto';
+import { CreatePublicWaiterCallDto } from './dto/create-public-waiter-call.dto';
 import { PublicMenuQueryDto } from './dto/public-menu-query.dto';
 import { REALTIME_EVENTS } from '../realtime/realtime-events.constants';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { WaiterCallsService } from '../waiter-calls/waiter-calls.service';
 
 interface CreatePublicOrderOptions {
   idempotencyKey?: string;
@@ -32,13 +34,21 @@ export class PublicOrderingService {
     private readonly ordersService: OrdersService,
     private readonly tableSessionsService: TableSessionsService,
     private readonly realtimeEvents: RealtimeEventsService,
+    private readonly waiterCallsService: WaiterCallsService,
   ) {
     const windowMinutes = this.configService.get<number>('PUBLIC_ORDER_IDEMPOTENCY_WINDOW_MINUTES', 15);
     this.idempotencyWindowMs = Math.max(1, windowMinutes) * 60 * 1000;
   }
 
   async getPublicMenu(query: PublicMenuQueryDto) {
-    await this.ensureBranchExists(query.branchId);
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: query.branchId },
+      select: { id: true, name: true },
+    });
+
+    if (!branch) {
+      throw new NotFoundException('Branch not found');
+    }
 
     const table = query.tableId
       ? await this.ensureTableInBranch(query.branchId, query.tableId)
@@ -48,13 +58,37 @@ export class PublicOrderingService {
 
     return {
       context: {
-        branchId: query.branchId,
+        branchId: branch.id,
+        branchName: branch.name,
         tableId: table?.id ?? null,
         tableName: table?.name ?? null,
         tableStatus: table?.status ?? null,
         suggestedServiceType: table ? ServiceType.DINE_IN : ServiceType.TAKEAWAY,
       },
       menu,
+    };
+  }
+
+  async createPublicWaiterCall(dto: CreatePublicWaiterCallDto) {
+    await this.ensureBranchExists(dto.branchId);
+    await this.ensureTableInBranch(dto.branchId, dto.tableId);
+
+    const actor = await this.resolveBranchSystemActor(dto.branchId, true);
+    const call = await this.waiterCallsService.create(dto.branchId, actor, {
+      tableId: dto.tableId,
+      callType: dto.callType,
+      note: this.buildPublicWaiterCallNote(dto.note),
+    });
+
+    return {
+      id: call.id,
+      branchId: call.branchId,
+      tableId: call.tableId,
+      tableName: call.table?.name ?? null,
+      status: call.status,
+      callType: call.callType,
+      requestedAt: call.requestedAt,
+      note: call.note,
     };
   }
 
@@ -404,6 +438,16 @@ export class PublicOrderingService {
     }
 
     return `${prefix} ${normalized}`.slice(0, 500);
+  }
+
+  private buildPublicWaiterCallNote(rawNotes?: string) {
+    const prefix = '[PUBLIC_QR_WAITER_CALL]';
+    const normalized = rawNotes?.trim();
+    if (!normalized) {
+      return prefix;
+    }
+
+    return `${prefix} ${normalized}`.slice(0, 300);
   }
 
   private async cancelOrderSafely(branchId: string, actor: AuthUser, orderId: string) {

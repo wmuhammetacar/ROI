@@ -24,6 +24,7 @@ const emptyOptionForm = {
 
 export function ModifiersPage() {
   const [groups, setGroups] = useState<ModifierGroup[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,8 +60,16 @@ export function ModifiersPage() {
   }, []);
 
   const sortedGroups = useMemo(
-    () => [...groups].sort((a, b) => a.sortOrder - b.sortOrder),
-    [groups],
+    () =>
+      [...groups]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .filter((group) => {
+          const term = searchTerm.trim().toLowerCase();
+          if (!term) return true;
+          if (group.name.toLowerCase().includes(term)) return true;
+          return (group.options ?? []).some((option) => option.name.toLowerCase().includes(term));
+        }),
+    [groups, searchTerm],
   );
 
   const openCreateGroup = () => {
@@ -90,6 +99,12 @@ export function ModifiersPage() {
     setGroupError(null);
 
     try {
+      if (groupForm.minSelect < 0 || groupForm.maxSelect < 0) {
+        throw new Error('min/max selection cannot be negative');
+      }
+      if (groupForm.minSelect > groupForm.maxSelect) {
+        throw new Error('minSelect cannot be greater than maxSelect');
+      }
       const payload = {
         name: groupForm.name.trim(),
         description: groupForm.description.trim() || undefined,
@@ -202,6 +217,13 @@ export function ModifiersPage() {
       />
 
       <SectionCard>
+        <div className="table-toolbar">
+          <input
+            placeholder="Search modifier group or option"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
         <DataState
           isLoading={isLoading}
           error={error}
@@ -217,6 +239,9 @@ export function ModifiersPage() {
                     <h3>{group.name}</h3>
                     <p className="muted">
                       {group.selectionType} • min {group.minSelect} / max {group.maxSelect}
+                    </p>
+                    <p className="muted">
+                      {group.minSelect > 0 ? 'Required Choice Group' : 'Optional Choice Group'}
                     </p>
                   </div>
                   <div className="badge-row">

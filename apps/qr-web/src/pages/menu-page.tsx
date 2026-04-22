@@ -5,13 +5,21 @@ import { publicCatalogApi, type PosCatalogProduct, type PublicMenuResponse } fro
 import { useCartContext } from '../app/cart-context';
 import { toErrorMessage } from '../app/error-utils';
 import { usePublicContext } from '../app/public-context';
-import { DataState, ProductCard, ProductConfiguratorModal, PublicErrorState } from '../components';
+import {
+  DataState,
+  ProductCard,
+  ProductConfiguratorModal,
+  PublicErrorState,
+  WaiterCallModal,
+} from '../components';
 
 export function MenuPage() {
   const { branchId, tableId, appendContext, hasValidBranchContext } = usePublicContext();
   const { itemCount, subtotal, addItem, setContext } = useCartContext();
   const [menuData, setMenuData] = useState<PublicMenuResponse | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<PosCatalogProduct | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [isWaiterCallOpen, setIsWaiterCallOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +41,8 @@ export function MenuPage() {
       try {
         const data = await publicCatalogApi.getMenu(branchId, tableId || undefined);
         setMenuData(data);
+        const firstCategoryId = data.menu.categories[0]?.id ?? null;
+        setSelectedCategoryId((current) => current ?? firstCategoryId);
       } catch (err) {
         setError(toErrorMessage(err));
       } finally {
@@ -47,6 +57,11 @@ export function MenuPage() {
   const availableProductCount = useMemo(
     () => categories.reduce((acc, category) => acc + category.products.length, 0),
     [categories],
+  );
+
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.id === selectedCategoryId) ?? categories[0] ?? null,
+    [categories, selectedCategoryId],
   );
 
   if (!hasValidBranchContext) {
@@ -90,13 +105,20 @@ export function MenuPage() {
   };
 
   return (
-    <div className="public-shell">
-      <header className="public-header">
-        <h1>ROI Menu</h1>
-        <p className="muted">
-          Branch {branchId}
-          {menuData?.context.tableName ? ` | Table ${menuData.context.tableName}` : ''}
-        </p>
+    <div className="public-shell premium-shell">
+      <header className="premium-hero">
+        <div>
+          <p className="hero-kicker">ROI · CROISSANT · DESSERT · COFFEE</p>
+          <h1>{menuData?.context.branchName ?? `Branch ${branchId}`}</h1>
+          <p className="muted">
+            {menuData?.context.tableName ? `Table ${menuData.context.tableName}` : 'Takeaway Menu'}
+            {menuData?.context.suggestedServiceType ? ` · ${menuData.context.suggestedServiceType.replace('_', ' ')}` : ''}
+          </p>
+        </div>
+        <div className="hero-stats">
+          <span>{categories.length} categories</span>
+          <span>{availableProductCount} products</span>
+        </div>
       </header>
 
       <DataState
@@ -108,41 +130,65 @@ export function MenuPage() {
 
       {!isLoading && !error && categories.length > 0 ? (
         <>
-          <nav className="category-nav">
-            {categories.map((category) => (
-              <a key={category.id} href={`#cat-${category.id}`} className="category-chip">
-                {category.name}
-              </a>
-            ))}
+          <nav className="category-nav premium-category-nav">
+            {categories.map((category) => {
+              const active = category.id === selectedCategory?.id;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  className={`category-chip ${active ? 'active' : ''}`}
+                  onClick={() => setSelectedCategoryId(category.id)}
+                >
+                  {category.name}
+                </button>
+              );
+            })}
           </nav>
 
           <main className="menu-stack">
-            {categories.map((category) => (
-              <section key={category.id} id={`cat-${category.id}`} className="category-section">
+            {selectedCategory ? (
+              <section className="category-section premium-category-section">
                 <header className="category-header">
-                  <h2>{category.name}</h2>
-                  <span>{category.products.length} item</span>
+                  <h2>{selectedCategory.name}</h2>
+                  <span>{selectedCategory.products.length} items</span>
                 </header>
                 <div className="product-grid">
-                  {category.products.map((product) => (
+                  {selectedCategory.products.map((product) => (
                     <ProductCard key={product.id} product={product} onSelect={() => setSelectedProduct(product)} />
                   ))}
                 </div>
               </section>
-            ))}
+            ) : null}
           </main>
         </>
       ) : null}
 
-      <Link to={appendContext('/cart')} className="cart-fab">
-        Cart ({itemCount}) · {formatCurrency(subtotal)}
-      </Link>
+      <div className="public-action-bar">
+        {tableId ? (
+          <button type="button" className="ghost" onClick={() => setIsWaiterCallOpen(true)}>
+            Call Waiter
+          </button>
+        ) : null}
+        <Link to={appendContext('/cart')} className="cart-fab">
+          Cart ({itemCount}) · {formatCurrency(subtotal)}
+        </Link>
+      </div>
 
       {selectedProduct ? (
         <ProductConfiguratorModal
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
           onAdd={addConfiguredItem}
+        />
+      ) : null}
+
+      {isWaiterCallOpen && tableId ? (
+        <WaiterCallModal
+          branchId={branchId}
+          tableId={tableId}
+          tableName={menuData?.context.tableName}
+          onClose={() => setIsWaiterCallOpen(false)}
         />
       ) : null}
     </div>

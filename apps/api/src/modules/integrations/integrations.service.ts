@@ -6,6 +6,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   BranchIntegrationConfigStatus,
   ExternalOrderIngestionStatus,
@@ -14,6 +15,7 @@ import {
   Prisma,
   ServiceType,
 } from '@prisma/client';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -37,14 +39,20 @@ import { UpdateMenuMappingDto } from './dto/update-menu-mapping.dto';
 @Injectable()
 export class IntegrationsService implements OnModuleInit {
   private readonly logger = new Logger(IntegrationsService.name);
+  private readonly credentialsKey: Buffer;
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     private readonly branchesService: BranchesService,
     private readonly ordersService: OrdersService,
     private readonly auditService: AuditService,
     private readonly adapterRegistry: IntegrationAdapterRegistry,
-  ) {}
+  ) {
+    this.credentialsKey = createHash('sha256')
+      .update(this.configService.getOrThrow<string>('INTEGRATION_CREDENTIALS_ENCRYPTION_KEY'))
+      .digest();
+  }
 
   async onModuleInit() {
     const defaultProviders: Array<{
@@ -97,7 +105,7 @@ export class IntegrationsService implements OnModuleInit {
   }
 
   async listConfigs(branchId: string, query: ListBranchIntegrationConfigsDto) {
-    return this.prisma.branchIntegrationConfig.findMany({
+    const configs = await this.prisma.branchIntegrationConfig.findMany({
       where: {
         branchId,
         providerId: query.providerId,
@@ -109,6 +117,8 @@ export class IntegrationsService implements OnModuleInit {
       orderBy: [{ updatedAt: 'desc' }],
       take: query.limit,
     });
+
+    return configs.map((item) => this.sanitizeConfigResponse(item));
   }
 
   async getConfigById(branchId: string, id: string) {
@@ -123,7 +133,7 @@ export class IntegrationsService implements OnModuleInit {
       throw new NotFoundException('Integration config not found');
     }
 
-    return config;
+    return this.sanitizeConfigResponse(config);
   }
 
   async createConfig(actor: AuthUser, dto: CreateBranchIntegrationConfigDto) {
@@ -149,7 +159,7 @@ export class IntegrationsService implements OnModuleInit {
         branchId: dto.branchId,
         providerId: dto.providerId,
         status: dto.status ?? BranchIntegrationConfigStatus.INACTIVE,
-        credentialsJson: this.toNullableJson(dto.credentialsJson),
+        credentialsJson: this.toNullableJson(this.encryptCredentials(dto.credentialsJson)),
         settingsJson: this.toNullableJson(dto.settingsJson),
       },
       include: { provider: true },
@@ -168,7 +178,7 @@ export class IntegrationsService implements OnModuleInit {
       },
     });
 
-    return created;
+    return this.sanitizeConfigResponse(created);
   }
 
   async updateConfig(actor: AuthUser, id: string, dto: UpdateBranchIntegrationConfigDto) {
@@ -178,14 +188,16 @@ export class IntegrationsService implements OnModuleInit {
       where: { id: existing.id },
       data: {
         status: dto.status ?? existing.status,
-        credentialsJson:
-          dto.credentialsJson !== undefined
-            ? this.toNullableJson(dto.credentialsJson)
-            : this.toNullableJson(existing.credentialsJson),
-        settingsJson:
-          dto.settingsJson !== undefined
-            ? this.toNullableJson(dto.settingsJson)
-            : this.toNullableJson(existing.settingsJson),
+        ...(dto.credentialsJson !== undefined
+          ? {
+              credentialsJson: this.toNullableJson(this.encryptCredentials(dto.credentialsJson)),
+            }
+          : {}),
+        ...(dto.settingsJson !== undefined
+          ? {
+              settingsJson: this.toNullableJson(dto.settingsJson),
+            }
+          : {}),
       },
       include: { provider: true },
     });
@@ -202,7 +214,7 @@ export class IntegrationsService implements OnModuleInit {
       },
     });
 
-    return updated;
+    return this.sanitizeConfigResponse(updated);
   }
 
   async updateConfigStatus(actor: AuthUser, id: string, status: BranchIntegrationConfigStatus) {
@@ -227,7 +239,7 @@ export class IntegrationsService implements OnModuleInit {
       },
     });
 
-    return updated;
+    return this.sanitizeConfigResponse(updated);
   }
 
   async listMenuMappings(branchId: string, query: ListMenuMappingsDto) {
@@ -467,13 +479,17 @@ export class IntegrationsService implements OnModuleInit {
         providerId: provider.id,
         status: BranchIntegrationConfigStatus.ACTIVE,
       },
-      select: { id: true },
+      select: { id: true, credentialsJson: true },
     });
 
     if (!activeConfig) {
       throw new BadRequestException(
         'Active branch integration config is required before test ingestion',
       );
+    }
+
+    if (activeConfig.credentialsJson) {
+      this.decryptCredentials(activeConfig.credentialsJson);
     }
 
     const normalized = adapter.normalizeInboundOrder(dto.payload);
@@ -514,18 +530,71 @@ export class IntegrationsService implements OnModuleInit {
       };
     }
 
-    const createdExternalOrder = await this.prisma.externalOrder.create({
-      data: {
+    let createdExternalOrder: { id: string };
+    try {
+      createdExternalOrder = await this.prisma.externalOrder.create({
+        data: {
+          branchId,
+          providerId: provider.id,
+          externalOrderId: normalized.externalOrderId,
+          externalStatus: normalized.externalStatus,
+          serviceType: normalized.serviceType,
+          payloadJson: this.toRequiredJson(dto.payload),
+          normalizedJson: this.toRequiredJson(normalized),
+          ingestionStatus: ExternalOrderIngestionStatus.RECEIVED,
+        },
+        select: {
+          id: true,
+        },
+      });
+    } catch (error) {
+      const duplicateError =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+
+      if (!duplicateError) {
+        throw error;
+      }
+
+      const existing = await this.prisma.externalOrder.findUnique({
+        where: {
+          branchId_providerId_externalOrderId: {
+            branchId,
+            providerId: provider.id,
+            externalOrderId: normalized.externalOrderId,
+          },
+        },
+        include: {
+          provider: true,
+          internalOrder: true,
+        },
+      });
+
+      if (!existing) {
+        throw new ConflictException(
+          'Duplicate external order detected but existing record could not be loaded',
+        );
+      }
+
+      await this.createSyncAttempt({
         branchId,
         providerId: provider.id,
-        externalOrderId: normalized.externalOrderId,
-        externalStatus: normalized.externalStatus,
-        serviceType: normalized.serviceType,
-        payloadJson: this.toRequiredJson(dto.payload),
-        normalizedJson: this.toRequiredJson(normalized),
-        ingestionStatus: ExternalOrderIngestionStatus.RECEIVED,
-      },
-    });
+        direction: IntegrationSyncDirection.INBOUND,
+        operation: 'TEST_INGEST_ORDER_DUPLICATE',
+        targetId: normalized.externalOrderId,
+        status: IntegrationSyncStatus.SUCCESS,
+        requestPayloadJson: dto.payload,
+        responsePayloadJson: {
+          duplicateExternalOrderId: existing.id,
+          internalOrderId: existing.internalOrderId,
+          source: 'UNIQUE_INDEX_RACE',
+        },
+      });
+
+      return {
+        duplicate: true,
+        externalOrder: existing,
+      };
+    }
 
     await this.prisma.externalOrder.update({
       where: { id: createdExternalOrder.id },
@@ -857,5 +926,93 @@ export class IntegrationsService implements OnModuleInit {
     }
 
     return 'Unknown integration ingestion error';
+  }
+
+  private encryptCredentials(credentials: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    if (credentials === undefined) {
+      return undefined;
+    }
+
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', this.credentialsKey, iv);
+    const plain = Buffer.from(JSON.stringify(credentials), 'utf8');
+    const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
+    const tag = cipher.getAuthTag();
+
+    return {
+      __roiEncryptedV1: true,
+      iv: iv.toString('base64'),
+      tag: tag.toString('base64'),
+      data: encrypted.toString('base64'),
+    };
+  }
+
+  private decryptCredentials(credentialsJson: unknown): Record<string, unknown> | null {
+    if (!credentialsJson || typeof credentialsJson !== 'object' || Array.isArray(credentialsJson)) {
+      return null;
+    }
+
+    const envelope = credentialsJson as Record<string, unknown>;
+    const isEncrypted = envelope.__roiEncryptedV1 === true;
+    if (!isEncrypted) {
+      return envelope;
+    }
+
+    const iv = typeof envelope.iv === 'string' ? envelope.iv : '';
+    const tag = typeof envelope.tag === 'string' ? envelope.tag : '';
+    const data = typeof envelope.data === 'string' ? envelope.data : '';
+    if (!iv || !tag || !data) {
+      throw new BadRequestException('Stored integration credentials are corrupted');
+    }
+
+    try {
+      const decipher = createDecipheriv(
+        'aes-256-gcm',
+        this.credentialsKey,
+        Buffer.from(iv, 'base64'),
+      );
+      decipher.setAuthTag(Buffer.from(tag, 'base64'));
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(data, 'base64')),
+        decipher.final(),
+      ]).toString('utf8');
+
+      const parsed = JSON.parse(decrypted);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new BadRequestException('Stored integration credentials are invalid');
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch {
+      throw new BadRequestException('Stored integration credentials cannot be decrypted');
+    }
+  }
+
+  private sanitizeConfigResponse<T extends { credentialsJson?: unknown }>(config: T) {
+    let decrypted: Record<string, unknown> | null = null;
+    try {
+      decrypted = this.decryptCredentials(config.credentialsJson);
+    } catch {
+      decrypted = null;
+    }
+
+    const credentialsPreview = this.maskCredentialsPreview(decrypted);
+
+    return {
+      ...config,
+      credentialsJson: null,
+      hasCredentials: Boolean(decrypted),
+      credentialsMasked: credentialsPreview,
+    };
+  }
+
+  private maskCredentialsPreview(value: Record<string, unknown> | null) {
+    if (!value) {
+      return null;
+    }
+
+    const raw = JSON.stringify(value);
+    const suffix = raw.slice(-4);
+    return `****${suffix}`;
   }
 }

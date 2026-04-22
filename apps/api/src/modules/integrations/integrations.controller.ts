@@ -17,6 +17,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
+import { throttlePolicies } from '../../common/throttle/throttle-policies';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { CreateBranchIntegrationConfigDto } from './dto/create-branch-integration-config.dto';
 import { CreateMenuMappingDto } from './dto/create-menu-mapping.dto';
@@ -30,9 +32,6 @@ import { UpdateBranchIntegrationConfigDto } from './dto/update-branch-integratio
 import { UpdateBranchIntegrationConfigStatusDto } from './dto/update-branch-integration-config-status.dto';
 import { UpdateMenuMappingDto } from './dto/update-menu-mapping.dto';
 import { IntegrationsService } from './integrations.service';
-
-const INTEGRATION_TEST_RATE_LIMIT_MAX = Number(process.env.INTEGRATION_TEST_RATE_LIMIT_MAX ?? 15);
-const INTEGRATION_TEST_RATE_LIMIT_TTL_MS = Number(process.env.RATE_LIMIT_TTL_SECONDS ?? 60) * 1000;
 
 @Controller('integrations')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -49,7 +48,7 @@ export class IntegrationsController {
   }
 
   @Get('providers/:id')
-  getProviderById(@Param('id') id: string) {
+  getProviderById(@Param('id', ParseCuidPipe) id: string) {
     return this.integrationsService.getProviderById(id);
   }
 
@@ -61,7 +60,7 @@ export class IntegrationsController {
 
   @Get('configs/:id')
   async getConfigById(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Query() query: ReadBranchScopeQueryDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -76,7 +75,7 @@ export class IntegrationsController {
 
   @Patch('configs/:id')
   updateConfig(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateBranchIntegrationConfigDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -85,7 +84,7 @@ export class IntegrationsController {
 
   @Patch('configs/:id/status')
   updateConfigStatus(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateBranchIntegrationConfigStatusDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -105,7 +104,7 @@ export class IntegrationsController {
 
   @Patch('menu-mappings/:id')
   updateMenuMapping(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateMenuMappingDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -113,7 +112,7 @@ export class IntegrationsController {
   }
 
   @Delete('menu-mappings/:id')
-  deleteMenuMapping(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  deleteMenuMapping(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.integrationsService.deleteMenuMapping(user, id);
   }
 
@@ -125,7 +124,7 @@ export class IntegrationsController {
 
   @Get('external-orders/:id')
   async getExternalOrderById(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Query() query: ReadBranchScopeQueryDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -140,14 +139,9 @@ export class IntegrationsController {
   }
 
   @Post('providers/:providerId/test-ingest-order')
-  @Throttle({
-    default: {
-      limit: Math.max(1, INTEGRATION_TEST_RATE_LIMIT_MAX),
-      ttl: INTEGRATION_TEST_RATE_LIMIT_TTL_MS,
-    },
-  })
+  @Throttle(throttlePolicies.integrationTest)
   async testIngestOrder(
-    @Param('providerId') providerId: string,
+    @Param('providerId', ParseCuidPipe) providerId: string,
     @Body() dto: TestIngestOrderDto,
     @CurrentUser() user: AuthUser,
   ) {

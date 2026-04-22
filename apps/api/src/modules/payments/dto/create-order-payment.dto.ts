@@ -9,11 +9,13 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { IsCuid } from '../../../common/validators/is-cuid.decorator';
 
 export class CreateOrderPaymentDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @IsCuid()
   registerShiftId!: string;
 
   @IsEnum(PaymentMethod)

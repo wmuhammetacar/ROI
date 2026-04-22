@@ -26,6 +26,11 @@ export class AuditInterceptor implements NestInterceptor {
     const request = httpContext.getRequest<Request & { user?: AuthUser }>();
     const response = httpContext.getResponse<Response>();
     const startedAt = Date.now();
+    const method = request.method.toUpperCase();
+
+    if (!this.shouldAudit(method, request.originalUrl ?? request.url)) {
+      return next.handle();
+    }
 
     return next.handle().pipe(
       finalize(() => {
@@ -66,5 +71,17 @@ export class AuditInterceptor implements NestInterceptor {
     };
 
     return map[method.toUpperCase()] ?? 'ACTION';
+  }
+
+  private shouldAudit(method: string, path: string): boolean {
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+      return false;
+    }
+
+    if (path.startsWith('/api/v1/public/menu')) {
+      return false;
+    }
+
+    return true;
   }
 }

@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { ListProductionTicketsDto } from './dto/list-production-tickets.dto';
 import { ProductionService } from './production.service';
 
@@ -20,7 +21,7 @@ export class ProductionTicketsController {
   }
 
   @Get(':id')
-  findById(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  findById(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.productionService.getProductionTicketById(user.branchId, id);
   }
 }

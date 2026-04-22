@@ -16,6 +16,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { AddCatalogOrderItemDto } from './dto/add-catalog-order-item.dto';
 import { AddOrderItemDto } from './dto/add-order-item.dto';
@@ -47,25 +48,33 @@ export class OrdersController {
   }
 
   @Get(':id/events')
-  async findEvents(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findEvents(
+    @Param('id', ParseCuidPipe) id: string,
+    @Query() query: ReadBranchScopeQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.ordersService.findEvents(branchId, id);
   }
 
   @Get(':id')
-  async findById(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findById(
+    @Param('id', ParseCuidPipe) id: string,
+    @Query() query: ReadBranchScopeQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.ordersService.findById(branchId, id);
   }
 
   @Post(':id/items')
-  addItem(@Param('id') id: string, @Body() dto: AddOrderItemDto, @CurrentUser() user: AuthUser) {
+  addItem(@Param('id', ParseCuidPipe) id: string, @Body() dto: AddOrderItemDto, @CurrentUser() user: AuthUser) {
     return this.ordersService.addItem(user.branchId, user, id, dto);
   }
 
   @Post(':id/items/catalog')
   addCatalogItem(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: AddCatalogOrderItemDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -74,8 +83,8 @@ export class OrdersController {
 
   @Patch(':id/items/:itemId')
   updateItem(
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('itemId', ParseCuidPipe) itemId: string,
     @Body() dto: UpdateOrderItemDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -84,8 +93,8 @@ export class OrdersController {
 
   @Patch(':id/items/:itemId/catalog')
   updateCatalogItem(
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('itemId', ParseCuidPipe) itemId: string,
     @Body() dto: UpdateCatalogOrderItemDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -93,13 +102,17 @@ export class OrdersController {
   }
 
   @Delete(':id/items/:itemId')
-  removeItem(@Param('id') id: string, @Param('itemId') itemId: string, @CurrentUser() user: AuthUser) {
+  removeItem(
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('itemId', ParseCuidPipe) itemId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
     return this.ordersService.removeItem(user.branchId, user, id, itemId);
   }
 
   @Patch(':id/status')
   updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateOrderStatusDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -107,7 +120,7 @@ export class OrdersController {
   }
 
   @Post(':id/cancel')
-  cancel(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  cancel(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.ordersService.cancel(user.branchId, user, id);
   }
 }

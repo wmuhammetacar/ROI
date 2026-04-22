@@ -8,16 +8,16 @@ import {
   type ReactNode,
 } from 'react';
 import { ApiError } from '@roi/api-client';
-import type { AuthLoginRequest, ConnectionState, SessionUser } from '@roi/shared-types';
+import type { ConnectionState, SessionUser } from '@roi/shared-types';
 import { reportClientError } from '@roi/shared-utils';
-import { posAuthApi, posSystemApi, posTokenStorage, posUsersApi } from '../api/client';
+import { posAuthApi, posStaffAuthApi, posSystemApi, posTokenStorage, posUsersApi } from '../api/client';
 import { POS_SESSION_EXPIRED_EVENT } from '../config/runtime';
 
 interface SessionContextValue {
   user: SessionUser | null;
   isLoadingSession: boolean;
   connectionState: ConnectionState;
-  login: (payload: AuthLoginRequest) => Promise<void>;
+  login: (payload: { username: string; pin?: string; password?: string } | { email: string; password: string }) => Promise<void>;
   logout: () => void;
 }
 
@@ -76,8 +76,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (payload: AuthLoginRequest) => {
-    const response = await posAuthApi.login(payload);
+  const login = useCallback(async (payload: { username: string; pin?: string; password?: string } | { email: string; password: string }) => {
+    const response =
+      'username' in payload
+        ? await posStaffAuthApi.staffLogin(payload)
+        : await posAuthApi.login(payload);
     posTokenStorage.setToken(response.accessToken);
     setUser(response.user);
     setConnectionState('online');

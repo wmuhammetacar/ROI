@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@roi/shared-utils';
 import { publicOrderingApi } from '../api';
@@ -16,6 +16,7 @@ export function CartPage() {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const pendingRetryRef = useRef<{ fingerprint: string; key: string } | null>(null);
 
   if (!hasValidBranchContext) {
     return (
@@ -25,6 +26,28 @@ export function CartPage() {
       />
     );
   }
+
+  const normalizedPayload = useMemo(
+    () => ({
+      branchId,
+      tableId: tableId || undefined,
+      clientSessionId: contextKey || undefined,
+      customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
+      notes: notes.trim() || undefined,
+      items: items.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId ?? undefined,
+        quantity: item.quantity,
+        notes: item.notes,
+        modifierSelections: item.modifierSelections.map((selection) => ({
+          modifierGroupId: selection.modifierGroupId,
+          optionIds: [...selection.optionIds].sort(),
+        })),
+      })),
+    }),
+    [branchId, contextKey, customerName, customerPhone, items, notes, tableId],
+  );
 
   const submitOrder = async () => {
     if (items.length === 0) {
@@ -36,35 +59,21 @@ export function CartPage() {
     setSubmitError(null);
 
     try {
-      const idempotencyKey = [
-        branchId,
-        tableId || 'no-table',
-        contextKey || 'no-context',
-        ...items.map((item) => `${item.id}:${item.quantity}`),
-      ]
-        .join('|')
-        .slice(0, 120);
+      const fingerprint = JSON.stringify(normalizedPayload);
+      const existingAttempt = pendingRetryRef.current;
+      const idempotencyKey =
+        existingAttempt && existingAttempt.fingerprint === fingerprint
+          ? existingAttempt.key
+          : createSubmitAttemptId();
+
+      pendingRetryRef.current = { fingerprint, key: idempotencyKey };
 
       const response = await publicOrderingApi.submitOrder({
-        branchId,
-        tableId: tableId || undefined,
-        clientSessionId: contextKey || undefined,
+        ...normalizedPayload,
         idempotencyKey,
-        customerName: customerName.trim() || undefined,
-        customerPhone: customerPhone.trim() || undefined,
-        notes: notes.trim() || undefined,
-        items: items.map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId ?? undefined,
-          quantity: item.quantity,
-          notes: item.notes,
-          modifierSelections: item.modifierSelections.map((selection) => ({
-            modifierGroupId: selection.modifierGroupId,
-            optionIds: selection.optionIds,
-          })),
-        })),
       });
 
+      pendingRetryRef.current = null;
       clear();
       navigate(appendContext('/order-submitted'), { state: response });
     } catch (err) {
@@ -128,4 +137,12 @@ export function CartPage() {
       </div>
     </div>
   );
+}
+
+function createSubmitAttemptId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

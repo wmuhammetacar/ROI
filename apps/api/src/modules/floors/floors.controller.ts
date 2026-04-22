@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { CreateFloorDto } from './dto/create-floor.dto';
 import { UpdateFloorDto } from './dto/update-floor.dto';
 import { FloorsService } from './floors.service';
@@ -28,19 +29,19 @@ export class FloorsController {
 
   @Get(':id')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
-  findById(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  findById(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.floorsService.findById(user.branchId, id);
   }
 
   @Patch(':id')
   @Roles(APP_ROLES.ADMIN)
-  update(@Param('id') id: string, @Body() dto: UpdateFloorDto, @CurrentUser() user: AuthUser) {
+  update(@Param('id', ParseCuidPipe) id: string, @Body() dto: UpdateFloorDto, @CurrentUser() user: AuthUser) {
     return this.floorsService.update(user.branchId, id, user.sub, dto);
   }
 
   @Delete(':id')
   @Roles(APP_ROLES.ADMIN)
-  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  remove(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.floorsService.remove(user.branchId, id, user.sub);
   }
 }

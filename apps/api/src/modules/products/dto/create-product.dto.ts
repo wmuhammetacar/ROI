@@ -1,6 +1,8 @@
 import { ProductType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -25,6 +27,14 @@ export class CreateProductDto {
   @IsString()
   @MaxLength(800)
   description?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(12)
+  @IsString({ each: true })
+  @MinLength(2, { each: true })
+  @MaxLength(40, { each: true })
+  allergenTags?: string[];
 
   @IsOptional()
   @IsString()

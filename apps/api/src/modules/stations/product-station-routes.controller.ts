@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { CreateProductStationRouteDto } from './dto/create-product-station-route.dto';
 import { UpdateProductStationRouteDto } from './dto/update-product-station-route.dto';
 import { StationsService } from './stations.service';
@@ -17,7 +18,7 @@ export class ProductStationRoutesController {
 
   @Post(':id/station-route')
   create(
-    @Param('id') productId: string,
+    @Param('id', ParseCuidPipe) productId: string,
     @Body() dto: CreateProductStationRouteDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -25,13 +26,13 @@ export class ProductStationRoutesController {
   }
 
   @Get(':id/station-route')
-  findByProduct(@Param('id') productId: string, @CurrentUser() user: AuthUser) {
+  findByProduct(@Param('id', ParseCuidPipe) productId: string, @CurrentUser() user: AuthUser) {
     return this.stationsService.getProductRoute(user.branchId, productId);
   }
 
   @Patch(':id/station-route')
   update(
-    @Param('id') productId: string,
+    @Param('id', ParseCuidPipe) productId: string,
     @Body() dto: UpdateProductStationRouteDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -39,7 +40,7 @@ export class ProductStationRoutesController {
   }
 
   @Delete(':id/station-route')
-  remove(@Param('id') productId: string, @CurrentUser() user: AuthUser) {
+  remove(@Param('id', ParseCuidPipe) productId: string, @CurrentUser() user: AuthUser) {
     return this.stationsService.deleteProductRoute(user.branchId, productId, user.sub);
   }
 }

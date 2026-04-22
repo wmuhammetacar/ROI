@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { ReadBranchScopeQueryDto } from '../../common/dto/read-branch-scope-query.dto';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { CloseRegisterShiftDto } from './dto/close-register-shift.dto';
@@ -27,7 +28,7 @@ export class RegisterShiftsController {
   }
 
   @Post(':id/close')
-  close(@Param('id') id: string, @Body() dto: CloseRegisterShiftDto, @CurrentUser() user: AuthUser) {
+  close(@Param('id', ParseCuidPipe) id: string, @Body() dto: CloseRegisterShiftDto, @CurrentUser() user: AuthUser) {
     return this.paymentsService.closeRegisterShift(user.branchId, id, user.sub, dto);
   }
 
@@ -38,25 +39,41 @@ export class RegisterShiftsController {
   }
 
   @Get(':id/summary')
-  async summary(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async summary(
+    @Param('id', ParseCuidPipe) id: string,
+    @Query() query: ReadBranchScopeQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.paymentsService.getRegisterShiftSummary(branchId, id);
   }
 
   @Get(':id/payments')
-  async payments(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async payments(
+    @Param('id', ParseCuidPipe) id: string,
+    @Query() query: ReadBranchScopeQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.paymentsService.getRegisterShiftPayments(branchId, id);
   }
 
   @Get(':id/orders')
-  async orders(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async orders(
+    @Param('id', ParseCuidPipe) id: string,
+    @Query() query: ReadBranchScopeQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.paymentsService.getRegisterShiftOrders(branchId, id);
   }
 
   @Get(':id')
-  async findById(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findById(
+    @Param('id', ParseCuidPipe) id: string,
+    @Query() query: ReadBranchScopeQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.paymentsService.getRegisterShiftById(branchId, id);
   }

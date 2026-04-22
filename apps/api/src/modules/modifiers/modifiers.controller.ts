@@ -16,6 +16,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { CreateModifierGroupDto } from './dto/create-modifier-group.dto';
 import { CreateModifierOptionDto } from './dto/create-modifier-option.dto';
@@ -46,7 +47,7 @@ export class ModifiersController {
 
   @Get(':id')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
-  async findGroupById(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findGroupById(@Param('id', ParseCuidPipe) id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.modifiersService.findGroupById(branchId, id);
   }
@@ -54,7 +55,7 @@ export class ModifiersController {
   @Patch(':id')
   @Roles(APP_ROLES.ADMIN)
   updateGroup(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateModifierGroupDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -63,14 +64,14 @@ export class ModifiersController {
 
   @Delete(':id')
   @Roles(APP_ROLES.ADMIN)
-  removeGroup(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  removeGroup(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.modifiersService.removeGroup(user.branchId, id, user.sub);
   }
 
   @Post(':id/options')
   @Roles(APP_ROLES.ADMIN)
   createOption(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: CreateModifierOptionDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -79,7 +80,7 @@ export class ModifiersController {
 
   @Get(':id/options')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
-  async findOptions(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findOptions(@Param('id', ParseCuidPipe) id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.modifiersService.findOptions(branchId, id);
   }
@@ -87,8 +88,8 @@ export class ModifiersController {
   @Patch(':id/options/:optionId')
   @Roles(APP_ROLES.ADMIN)
   updateOption(
-    @Param('id') id: string,
-    @Param('optionId') optionId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('optionId', ParseCuidPipe) optionId: string,
     @Body() dto: UpdateModifierOptionDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -98,8 +99,8 @@ export class ModifiersController {
   @Delete(':id/options/:optionId')
   @Roles(APP_ROLES.ADMIN)
   removeOption(
-    @Param('id') id: string,
-    @Param('optionId') optionId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('optionId', ParseCuidPipe) optionId: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.modifiersService.removeOption(user.branchId, id, optionId, user.sub);

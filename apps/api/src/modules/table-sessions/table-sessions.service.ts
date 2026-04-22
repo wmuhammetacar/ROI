@@ -1,7 +1,9 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { OrderStatus, TableSessionStatus, TableStatus } from '@prisma/client';
+import { OrderStatus, Prisma, TableSessionStatus, TableStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { REALTIME_EVENTS } from '../realtime/realtime-events.constants';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { OpenTableSessionDto } from './dto/open-table-session.dto';
 import { ensureTableAllowsSessionOpen } from './domain/table-session.rules';
 
@@ -10,6 +12,7 @@ export class TableSessionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async open(branchId: string, actorUserId: string, dto: OpenTableSessionDto) {
@@ -58,29 +61,40 @@ export class TableSessionsService {
       }
     }
 
-    const session = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.tableSession.create({
-        data: {
-          branchId,
-          tableId: table.id,
-          openedByUserId: actorUserId,
-          assignedWaiterId: dto.assignedWaiterId,
-          guestCount: dto.guestCount,
-          status: TableSessionStatus.OPEN,
-          openedAt: new Date(),
-          notes: dto.notes,
-        },
-      });
+    let session: { id: string };
+    try {
+      session = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.tableSession.create({
+          data: {
+            branchId,
+            tableId: table.id,
+            openedByUserId: actorUserId,
+            assignedWaiterId: dto.assignedWaiterId,
+            guestCount: dto.guestCount,
+            status: TableSessionStatus.OPEN,
+            openedAt: new Date(),
+            notes: dto.notes,
+          },
+          select: {
+            id: true,
+          },
+        });
 
-      await tx.table.update({
-        where: { id: table.id },
-        data: {
-          status: TableStatus.OCCUPIED,
-        },
-      });
+        await tx.table.update({
+          where: { id: table.id },
+          data: {
+            status: TableStatus.OCCUPIED,
+          },
+        });
 
-      return created;
-    });
+        return created;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Table already has an OPEN session');
+      }
+      throw error;
+    }
 
     await this.auditService.logAction({
       userId: actorUserId,
@@ -91,6 +105,13 @@ export class TableSessionsService {
         tableId: table.id,
         branchId,
       },
+    });
+
+    this.realtimeEvents.emitToBranch(branchId, REALTIME_EVENTS.TABLE_UPDATED, {
+      tableId: table.id,
+      tableSessionId: session.id,
+      status: TableStatus.OCCUPIED,
+      reason: 'table_session_opened',
     });
 
     return this.findById(branchId, session.id);
@@ -175,6 +196,13 @@ export class TableSessionsService {
         tableId: session.tableId,
         branchId,
       },
+    });
+
+    this.realtimeEvents.emitToBranch(branchId, REALTIME_EVENTS.TABLE_UPDATED, {
+      tableId: session.tableId,
+      tableSessionId: closedSession.id,
+      status: TableStatus.AVAILABLE,
+      reason: 'table_session_closed',
     });
 
     return this.findById(branchId, closedSession.id);

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { inventoryIngredientsApi, inventoryUnitsApi } from '../../api';
-import type { Ingredient, StockMovement, UnitOfMeasure, WasteRecord } from '../../api/inventory-types';
+import type {
+  Ingredient,
+  IngredientDetail,
+  StockMovement,
+  UnitOfMeasure,
+  WasteRecord,
+} from '../../api/inventory-types';
 import { toErrorMessage } from '../../app/error-utils';
 import { DataState, Modal, PageHeader, SectionCard, StatusBadge } from '../../components';
 
@@ -9,6 +16,7 @@ const emptyIngredientForm = {
   sku: '',
   unitId: '',
   currentStock: 0,
+  lowStockThreshold: 0,
   isActive: true,
 };
 
@@ -29,10 +37,17 @@ function formatStock(value: string | number) {
   return amount.toLocaleString('tr-TR', { maximumFractionDigits: 3 });
 }
 
+function isLowStock(ingredient: Pick<Ingredient, 'currentStock' | 'lowStockThreshold'>) {
+  return Number(ingredient.lowStockThreshold) > 0 && Number(ingredient.currentStock) <= Number(ingredient.lowStockThreshold);
+}
+
 export function InventoryIngredientsPage() {
+  const [searchParams] = useSearchParams();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [units, setUnits] = useState<UnitOfMeasure[]>([]);
   const [filterState, setFilterState] = useState<'all' | 'active' | 'inactive'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -50,6 +65,9 @@ export function InventoryIngredientsPage() {
   const [wasteRecords, setWasteRecords] = useState<WasteRecord[]>([]);
   const [isMovementsOpen, setIsMovementsOpen] = useState(false);
   const [isWasteRecordsOpen, setIsWasteRecordsOpen] = useState(false);
+
+  const [detail, setDetail] = useState<IngredientDetail | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   const sortedIngredients = useMemo(
     () => [...ingredients].sort((a, b) => a.name.localeCompare(b.name)),
@@ -74,12 +92,30 @@ export function InventoryIngredientsPage() {
 
     try {
       const isActive = filterState === 'all' ? undefined : filterState === 'active';
-      const data = await inventoryIngredientsApi.list({ isActive });
+      const data = await inventoryIngredientsApi.list({
+        isActive,
+        lowStockOnly,
+        q: searchTerm.trim() || undefined,
+        limit: 500,
+      });
       setIngredients(data);
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadDetail = async (ingredientId: string) => {
+    setIsDetailLoading(true);
+    setFormError(null);
+    try {
+      const data = await inventoryIngredientsApi.getDetail(ingredientId);
+      setDetail(data);
+    } catch (err) {
+      setFormError(toErrorMessage(err));
+    } finally {
+      setIsDetailLoading(false);
     }
   };
 
@@ -89,7 +125,13 @@ export function InventoryIngredientsPage() {
 
   useEffect(() => {
     void loadIngredients();
-  }, [filterState]);
+  }, [filterState, lowStockOnly]);
+
+  useEffect(() => {
+    const preselectedId = searchParams.get('ingredientId');
+    if (!preselectedId) return;
+    void loadDetail(preselectedId);
+  }, [searchParams]);
 
   const openCreate = () => {
     setEditingIngredient(null);
@@ -105,6 +147,7 @@ export function InventoryIngredientsPage() {
       sku: ingredient.sku ?? '',
       unitId: ingredient.unitId,
       currentStock: Number(ingredient.currentStock),
+      lowStockThreshold: Number(ingredient.lowStockThreshold ?? 0),
       isActive: ingredient.isActive,
     });
     setFormError(null);
@@ -127,12 +170,16 @@ export function InventoryIngredientsPage() {
         sku: formState.sku.trim() || undefined,
         unitId: formState.unitId,
         currentStock: Number(formState.currentStock),
+        lowStockThreshold: Number(formState.lowStockThreshold),
         isActive: formState.isActive,
       };
 
       if (editingIngredient) {
         const updated = await inventoryIngredientsApi.update(editingIngredient.id, payload);
         setIngredients((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        if (detail?.ingredient.id === updated.id) {
+          await loadDetail(updated.id);
+        }
       } else {
         const created = await inventoryIngredientsApi.create(payload);
         setIngredients((prev) => [...prev, created]);
@@ -153,6 +200,9 @@ export function InventoryIngredientsPage() {
     try {
       await inventoryIngredientsApi.remove(ingredient.id);
       setIngredients((prev) => prev.filter((item) => item.id !== ingredient.id));
+      if (detail?.ingredient.id === ingredient.id) {
+        setDetail(null);
+      }
     } catch (err) {
       setError(toErrorMessage(err));
     }
@@ -166,6 +216,9 @@ export function InventoryIngredientsPage() {
         isActive: !ingredient.isActive,
       });
       setIngredients((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      if (detail?.ingredient.id === updated.id) {
+        await loadDetail(updated.id);
+      }
     } catch (err) {
       setError(toErrorMessage(err));
     }
@@ -205,6 +258,7 @@ export function InventoryIngredientsPage() {
       });
       setIsAdjustOpen(false);
       await loadIngredients();
+      await loadDetail(selectedIngredient.id);
     } catch (err) {
       setFormError(toErrorMessage(err));
     } finally {
@@ -224,6 +278,7 @@ export function InventoryIngredientsPage() {
       });
       setIsWasteOpen(false);
       await loadIngredients();
+      await loadDetail(selectedIngredient.id);
     } catch (err) {
       setFormError(toErrorMessage(err));
     } finally {
@@ -259,7 +314,7 @@ export function InventoryIngredientsPage() {
     <div className="catalog-content">
       <PageHeader
         title="Ingredients"
-        description="Manage stock-tracked ingredients and operational adjustments."
+        description="Manage stock-tracked ingredients, low-stock thresholds, and waste/fire operations."
         actions={
           <button type="button" onClick={openCreate}>
             New Ingredient
@@ -270,6 +325,14 @@ export function InventoryIngredientsPage() {
       <SectionCard>
         <div className="table-toolbar">
           <label className="inline-field">
+            Search
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Ingredient or SKU"
+            />
+          </label>
+          <label className="inline-field">
             Status Filter
             <select value={filterState} onChange={(event) => setFilterState(event.target.value as typeof filterState)}>
               <option value="all">All</option>
@@ -277,7 +340,14 @@ export function InventoryIngredientsPage() {
               <option value="inactive">Inactive</option>
             </select>
           </label>
+          <label className="checkbox inline-field compact-checkbox">
+            <input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} />
+            Low stock only
+          </label>
           <button type="button" className="secondary" onClick={loadIngredients}>
+            Apply Filters
+          </button>
+          <button type="button" className="secondary" onClick={() => void loadIngredients()}>
             Refresh
           </button>
         </div>
@@ -285,7 +355,7 @@ export function InventoryIngredientsPage() {
           isLoading={isLoading}
           error={error}
           empty={!isLoading && ingredients.length === 0}
-          emptyMessage="No ingredients yet. Create your first stock item."
+          emptyMessage="No ingredients found for current filters."
         />
         {!isLoading && ingredients.length > 0 ? (
           <div className="table-wrap">
@@ -295,6 +365,8 @@ export function InventoryIngredientsPage() {
                   <th>Ingredient</th>
                   <th>Unit</th>
                   <th>Current Stock</th>
+                  <th>Low Threshold</th>
+                  <th>Risk</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -313,9 +385,20 @@ export function InventoryIngredientsPage() {
                       {formatStock(ingredient.currentStock)} {ingredient.unit?.code ?? ''}
                     </td>
                     <td>
+                      {Number(ingredient.lowStockThreshold) > 0
+                        ? `${formatStock(ingredient.lowStockThreshold)} ${ingredient.unit?.code ?? ''}`
+                        : '—'}
+                    </td>
+                    <td>
+                      {isLowStock(ingredient) ? <span className="status-chip warn">Low</span> : <span className="status-chip ok">Healthy</span>}
+                    </td>
+                    <td>
                       <StatusBadge active={ingredient.isActive} />
                     </td>
                     <td className="table-actions">
+                      <button type="button" className="secondary" onClick={() => void loadDetail(ingredient.id)}>
+                        Detail
+                      </button>
                       <button type="button" className="secondary" onClick={() => openEdit(ingredient)}>
                         Edit
                       </button>
@@ -326,7 +409,7 @@ export function InventoryIngredientsPage() {
                         Adjust
                       </button>
                       <button type="button" className="secondary" onClick={() => openWaste(ingredient)}>
-                        Waste
+                        Waste / Fire
                       </button>
                       <button type="button" className="secondary" onClick={() => openMovements(ingredient)}>
                         Movements
@@ -344,6 +427,83 @@ export function InventoryIngredientsPage() {
             </table>
           </div>
         ) : null}
+      </SectionCard>
+
+      <SectionCard title="Ingredient Detail" subtitle="Operational context with recent movement, waste, and recipe usage.">
+        {isDetailLoading ? <p className="muted">Loading detail...</p> : null}
+        {!isDetailLoading && detail ? (
+          <div className="inventory-detail-grid">
+            <div className="detail-card">
+              <h3>{detail.ingredient.name}</h3>
+              <p className="muted">SKU: {detail.ingredient.sku ?? '—'}</p>
+              <p>
+                Stock: <strong>{formatStock(detail.ingredient.currentStock)} {detail.ingredient.unit?.code ?? ''}</strong>
+              </p>
+              <p>
+                Low threshold:{' '}
+                <strong>
+                  {Number(detail.ingredient.lowStockThreshold) > 0
+                    ? `${formatStock(detail.ingredient.lowStockThreshold)} ${detail.ingredient.unit?.code ?? ''}`
+                    : 'Not set'}
+                </strong>
+              </p>
+              <p>
+                Risk state: {detail.isLowStock ? <span className="status-chip warn">Low stock</span> : <span className="status-chip ok">Healthy</span>}
+              </p>
+            </div>
+            <div className="detail-card">
+              <h4>Linked Recipes / Products</h4>
+              {detail.linkedRecipes.length === 0 ? (
+                <p className="muted">No linked recipes.</p>
+              ) : (
+                <ul className="compact-list">
+                  {detail.linkedRecipes.map((recipe) => (
+                    <li key={`${recipe.id}-${recipe.quantityPerRecipe}`}>
+                      <strong>{recipe.name}</strong>
+                      <span className="muted">
+                        {' '}• {recipe.productVariant?.product?.name ?? recipe.product?.name ?? 'Product'}
+                        {recipe.productVariant ? ` / ${recipe.productVariant.name}` : ''}
+                        {' '}• Qty {formatStock(recipe.quantityPerRecipe)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="detail-card">
+              <h4>Recent Movements</h4>
+              {detail.recentMovements.length === 0 ? (
+                <p className="muted">No movements.</p>
+              ) : (
+                <ul className="compact-list">
+                  {detail.recentMovements.slice(0, 8).map((movement) => (
+                    <li key={movement.id}>
+                      <strong>{movement.movementType}</strong>
+                      <span className="muted"> • {formatStock(movement.quantity)} • {new Date(movement.createdAt).toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="detail-card">
+              <h4>Recent Waste / Fire</h4>
+              {detail.recentWasteRecords.length === 0 ? (
+                <p className="muted">No waste/fire records.</p>
+              ) : (
+                <ul className="compact-list">
+                  {detail.recentWasteRecords.slice(0, 8).map((record) => (
+                    <li key={record.id}>
+                      <strong>{formatStock(record.quantity)}</strong>
+                      <span className="muted"> • {record.reason} • {new Date(record.createdAt).toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {!isDetailLoading && !detail ? <p className="muted">Select an ingredient from the list to inspect detail.</p> : null}
+        {formError ? <p className="error">{formError}</p> : null}
       </SectionCard>
 
       {isModalOpen ? (
@@ -395,6 +555,18 @@ export function InventoryIngredientsPage() {
                 />
               </label>
             ) : null}
+            <label>
+              Low Stock Threshold
+              <input
+                type="number"
+                min={0}
+                step={0.001}
+                value={formState.lowStockThreshold}
+                onChange={(event) =>
+                  setFormState((prev) => ({ ...prev, lowStockThreshold: Number(event.target.value) }))
+                }
+              />
+            </label>
             <label className="checkbox">
               <input
                 type="checkbox"
@@ -464,7 +636,7 @@ export function InventoryIngredientsPage() {
       ) : null}
 
       {isWasteOpen && selectedIngredient ? (
-        <Modal title={`Record Waste - ${selectedIngredient.name}`} onClose={closeOperationalModal}>
+        <Modal title={`Record Waste / Fire - ${selectedIngredient.name}`} onClose={closeOperationalModal}>
           <div className="form-grid">
             <label>
               Quantity ({selectedIngredient.unit?.code ?? 'unit'})
@@ -491,7 +663,7 @@ export function InventoryIngredientsPage() {
                 Cancel
               </button>
               <button type="button" onClick={submitWaste} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Record Waste'}
+                {isSubmitting ? 'Saving...' : 'Record Waste / Fire'}
               </button>
             </div>
           </div>

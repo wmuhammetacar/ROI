@@ -24,6 +24,8 @@ export interface BranchIntegrationConfig {
   providerId: string;
   status: BranchIntegrationConfigStatus;
   credentialsJson?: Record<string, unknown> | null;
+  hasCredentials?: boolean;
+  credentialsMasked?: string | null;
   settingsJson?: Record<string, unknown> | null;
   lastSyncAt?: string | null;
   provider?: IntegrationProvider;

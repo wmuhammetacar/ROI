@@ -72,3 +72,67 @@ Minimum restore drill:
 5. If auth/public endpoints fail, inspect throttling and validation errors
 6. Communicate blast radius (admin/pos/kds/qr impact)
 
+## Launch-Critical Failure Playbooks
+
+### 1) Printer issue / route missing
+
+- Symptom: send-to-station fails or production output not visible on expected station printer.
+- Immediate checks:
+  1. `GET /api/v1/printers/routing/preview?productId=:id`
+  2. verify selected printer is active and station-mapped
+  3. verify station code resolves as expected (`BAR` / `KITCHEN`)
+- Recovery:
+  - activate/assign a primary printer for the affected station
+  - if no station printer exists, assign fallback printer and re-run preview
+
+### 2) Network denial (internal apps)
+
+- Symptom: staff/admin login blocked with `403` from internal endpoints.
+- Immediate checks:
+  1. validate source IP and `x-forwarded-for` handling in edge/proxy
+  2. inspect branch `allowedNetworkCidrs`
+- Recovery:
+  - correct branch network settings (`PATCH /branches/:id/network-settings`)
+  - confirm blocked internal endpoints remain blocked for disallowed IPs
+  - confirm public routes (QR/menu) remain reachable
+
+### 3) Payment blocked / shift missing
+
+- Symptom: payment create fails due to register shift constraints.
+- Immediate checks:
+  1. `GET /api/v1/register-shifts/open/current`
+  2. ensure order is billed before payment
+- Recovery:
+  - open shift (`POST /register-shifts/open`)
+  - retry payment
+  - verify mixed payment path and final `PAID` order status
+
+### 4) Inventory mismatch / low stock
+
+- Symptom: unexpected stock risk or waste/adjust mismatch.
+- Immediate checks:
+  1. ingredient detail (`GET /ingredients/:id/detail`)
+  2. stock movements (`GET /ingredients/:id/stock-movements`)
+  3. waste records (`GET /ingredients/:id/waste-records`)
+- Recovery:
+  - apply manual stock adjustment with reason
+  - record waste/fire explicitly
+  - verify low-stock threshold and `isLowStock` state in summary
+
+### 5) QR menu / public waiter call issue
+
+- Symptom: customer cannot load menu or waiter call not visible operationally.
+- Immediate checks:
+  1. `GET /api/v1/public/menu?branchId=:id`
+  2. `POST /api/v1/public/waiter-calls`
+  3. `GET /api/v1/waiter-calls` (internal visibility)
+- Recovery:
+  - validate branch/table IDs used by QR context
+  - confirm public throttling and CORS are not misconfigured
+  - ensure waiter-call panel consumption is active in operations UI
+
+## Audit Log Retention (Minimum)
+
+- Keep audit logs for a defined retention window (for example 90 days hot storage + archive).
+- Periodically archive/purge old rows with a scheduled DB job to prevent unbounded table growth.
+- Protect archived logs with the same access controls as primary production data.

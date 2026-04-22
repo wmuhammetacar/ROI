@@ -11,6 +11,11 @@ import { DashboardPage } from './pages/dashboard-page';
 import { BranchesPage } from './pages/branches/branches-page';
 import { BranchDetailPage } from './pages/branches/branch-detail-page';
 import { IntegrationsRoutes } from './pages/integrations/integrations-layout';
+import { OperationsCenterPage } from './pages/operations-center-page';
+import { StaffManagementPage } from './pages/operations/staff-management-page';
+import { PrinterManagementPage } from './pages/operations/printer-management-page';
+import { NetworkAccessSettingsPage } from './pages/operations/network-access-settings-page';
+import { CustomerPackageDeskPage } from './pages/operations/customer-package-desk-page';
 
 export function App() {
   return (
@@ -26,6 +31,11 @@ export function App() {
       >
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/operations" element={<OperationsCenterPage />} />
+        <Route path="/operations/staff" element={<StaffManagementPage />} />
+        <Route path="/operations/printers" element={<PrinterManagementPage />} />
+        <Route path="/operations/network" element={<NetworkAccessSettingsPage />} />
+        <Route path="/operations/customers" element={<CustomerPackageDeskPage />} />
         <Route path="/branches" element={<BranchesPage />} />
         <Route path="/branches/:id" element={<BranchDetailPage />} />
         <Route path="/catalog/*" element={<CatalogRoutes />} />

@@ -1,4 +1,4 @@
-import { Controller, Get, Header, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Header, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from './database/prisma.service';
@@ -66,6 +66,10 @@ export class AppController {
   @SkipThrottle()
   @Header('Content-Type', 'text/html; charset=utf-8')
   getUi(): string {
+    if (this.configService.get<string>('NODE_ENV', 'development') === 'production') {
+      throw new NotFoundException('Not found');
+    }
+
     return `<!doctype html>
 <html lang="en">
 <head>

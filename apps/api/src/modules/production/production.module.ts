@@ -4,6 +4,7 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { ProductionTicketItemsController } from './production-ticket-items.controller';
 import { ProductionTicketsController } from './production-tickets.controller';
 import { ProductionOrdersController } from './production-orders.controller';
+import { PrinterRoutingService } from './printer-routing.service';
 import { ProductionService } from './production.service';
 import { StationProductionController } from './station-production.controller';
 
@@ -15,7 +16,7 @@ import { StationProductionController } from './station-production.controller';
     ProductionTicketItemsController,
     StationProductionController,
   ],
-  providers: [ProductionService],
+  providers: [ProductionService, PrinterRoutingService],
   exports: [ProductionService],
 })
 export class ProductionModule {}

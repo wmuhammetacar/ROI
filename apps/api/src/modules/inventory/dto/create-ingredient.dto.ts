@@ -34,6 +34,12 @@ export class CreateIngredientDto {
   currentStock!: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 3 })
+  @Min(0)
+  lowStockThreshold?: number;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }

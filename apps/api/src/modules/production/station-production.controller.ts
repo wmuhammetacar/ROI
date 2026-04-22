@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { ProductionService } from './production.service';
 
 @Controller('stations')
@@ -14,17 +15,17 @@ export class StationProductionController {
   constructor(private readonly productionService: ProductionService) {}
 
   @Get(':id/production-tickets')
-  getStationTickets(@Param('id') stationId: string, @CurrentUser() user: AuthUser) {
+  getStationTickets(@Param('stationId', ParseCuidPipe) stationId: string, @CurrentUser() user: AuthUser) {
     return this.productionService.getStationProductionTickets(user.branchId, stationId);
   }
 
   @Get(':id/kds/queue')
-  getKdsQueue(@Param('id') stationId: string, @CurrentUser() user: AuthUser) {
+  getKdsQueue(@Param('stationId', ParseCuidPipe) stationId: string, @CurrentUser() user: AuthUser) {
     return this.productionService.getStationKdsQueue(user.branchId, stationId);
   }
 
   @Get(':id/kds/summary')
-  getKdsSummary(@Param('id') stationId: string, @CurrentUser() user: AuthUser) {
+  getKdsSummary(@Param('stationId', ParseCuidPipe) stationId: string, @CurrentUser() user: AuthUser) {
     return this.productionService.getStationKdsSummary(user.branchId, stationId);
   }
 }

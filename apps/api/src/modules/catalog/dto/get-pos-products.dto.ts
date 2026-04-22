@@ -9,4 +9,8 @@ export class GetPosProductsDto extends ReadBranchScopeQueryDto {
   @IsOptional()
   @IsBooleanString()
   includeUnavailable?: string;
+
+  @IsOptional()
+  @IsBooleanString()
+  routeSafe?: string;
 }

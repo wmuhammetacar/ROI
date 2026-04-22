@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ReadBranchScopeQueryDto } from '../../../common/dto/read-branch-scope-query.dto';
+import { IsCuid } from '../../../common/validators/is-cuid.decorator';
 
 function toOptionalBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null || value === '') {
@@ -23,6 +24,7 @@ function toOptionalBoolean(value: unknown): boolean | undefined {
 export class ListMenuMappingsDto extends ReadBranchScopeQueryDto {
   @IsOptional()
   @IsString()
+  @IsCuid()
   providerId?: string;
 
   @IsOptional()

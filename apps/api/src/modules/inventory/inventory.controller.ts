@@ -18,7 +18,7 @@ export class InventoryController {
   ) {}
 
   @Get('summary')
-  @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER)
+  @Roles(APP_ROLES.ADMIN, APP_ROLES.MANAGER, APP_ROLES.CASHIER)
   async getSummary(@Query() query: GetInventorySummaryDto, @CurrentUser() user: AuthUser) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.inventoryService.getInventorySummary(branchId, query);

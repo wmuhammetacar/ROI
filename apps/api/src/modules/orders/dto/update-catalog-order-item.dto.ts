@@ -10,18 +10,21 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CatalogModifierSelectionDto } from './catalog-modifier-selection.dto';
+import { IsCuid } from '../../../common/validators/is-cuid.decorator';
 
 export class UpdateCatalogOrderItemDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @IsCuid()
   productId?: string;
 
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @IsCuid()
   variantId?: string | null;
 
   @IsOptional()
@@ -41,4 +44,3 @@ export class UpdateCatalogOrderItemDto {
   @Type(() => CatalogModifierSelectionDto)
   modifierSelections?: CatalogModifierSelectionDto[];
 }
-

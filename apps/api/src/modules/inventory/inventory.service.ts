@@ -232,6 +232,7 @@ export class InventoryService {
         sku,
         unitId: unit.id,
         currentStock: new Prisma.Decimal(dto.currentStock),
+        lowStockThreshold: new Prisma.Decimal(dto.lowStockThreshold ?? 0),
         isActive: dto.isActive ?? true,
       },
       include: {
@@ -253,17 +254,31 @@ export class InventoryService {
   }
 
   async listIngredients(branchId: string, query: ListIngredientsDto) {
-    return this.prisma.ingredient.findMany({
+    const ingredients = await this.prisma.ingredient.findMany({
       where: {
         branchId,
         isActive: query.isActive,
+        OR: query.q?.trim()
+          ? [
+              { name: { contains: query.q.trim(), mode: 'insensitive' } },
+              { sku: { contains: query.q.trim(), mode: 'insensitive' } },
+            ]
+          : undefined,
       },
       include: {
         unit: true,
       },
       orderBy: [{ name: 'asc' }],
-      take: query.limit,
+      take: query.lowStockOnly ? 1000 : query.limit,
     });
+
+    if (!query.lowStockOnly) {
+      return ingredients;
+    }
+
+    return ingredients
+      .filter((ingredient) => this.isLowStock(ingredient.currentStock, ingredient.lowStockThreshold))
+      .slice(0, query.limit);
   }
 
   async getIngredientById(branchId: string, ingredientId: string) {
@@ -304,6 +319,10 @@ export class InventoryService {
           id: unit.id,
         },
       };
+    }
+
+    if (dto.lowStockThreshold !== undefined) {
+      updateData.lowStockThreshold = new Prisma.Decimal(dto.lowStockThreshold);
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -350,6 +369,8 @@ export class InventoryService {
           name: updateData.name,
           sku: updateData.sku,
           unitId: dto.unitId,
+          lowStockThreshold:
+            dto.lowStockThreshold !== undefined ? new Prisma.Decimal(dto.lowStockThreshold).toString() : undefined,
         },
       },
     });
@@ -1038,19 +1059,159 @@ export class InventoryService {
       latestMovementsRaw.map((row) => [row.ingredientId, row._max.createdAt]),
     );
 
+    const recipeCoverageRows = ingredientIds.length
+      ? await this.prisma.recipeItem.groupBy({
+          by: ['ingredientId'],
+          where: {
+            ingredientId: {
+              in: ingredientIds,
+            },
+            recipe: {
+              branchId,
+              isActive: true,
+            },
+          },
+          _count: {
+            _all: true,
+          },
+        })
+      : [];
+
+    const recipeCoverageByIngredientId = new Map(
+      recipeCoverageRows.map((row) => [row.ingredientId, row._count._all]),
+    );
+
+    const recentMovementCount = ingredientIds.length
+      ? await this.prisma.stockMovement.count({
+          where: {
+            branchId,
+            ingredientId: {
+              in: ingredientIds,
+            },
+            createdAt: {
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+            },
+          },
+        })
+      : 0;
+
+    const lowStockCount = ingredients.filter((ingredient) =>
+      this.isLowStock(ingredient.currentStock, ingredient.lowStockThreshold),
+    ).length;
+
     return {
       branchId,
       generatedAt: new Date().toISOString(),
       totalIngredients: ingredients.length,
       activeIngredients: ingredients.filter((ingredient) => ingredient.isActive).length,
+      inactiveIngredients: ingredients.filter((ingredient) => !ingredient.isActive).length,
+      lowStockCount,
+      recentMovementCount24h: recentMovementCount,
+      recipeCoverageCount: recipeCoverageRows.length,
       items: ingredients.map((ingredient) => ({
         id: ingredient.id,
         name: ingredient.name,
         sku: ingredient.sku,
         currentStock: ingredient.currentStock,
+        lowStockThreshold: ingredient.lowStockThreshold,
+        isLowStock: this.isLowStock(ingredient.currentStock, ingredient.lowStockThreshold),
+        recipeUsageCount: recipeCoverageByIngredientId.get(ingredient.id) ?? 0,
         isActive: ingredient.isActive,
         unit: ingredient.unit,
         latestMovementAt: latestMovementByIngredientId.get(ingredient.id) ?? null,
+      })),
+    };
+  }
+
+  async getIngredientDetail(branchId: string, ingredientId: string) {
+    const ingredient = await this.getIngredientById(branchId, ingredientId);
+
+    const [recentMovements, recentWasteRecords, linkedRecipeItems] = await Promise.all([
+      this.prisma.stockMovement.findMany({
+        where: {
+          branchId,
+          ingredientId,
+        },
+        include: {
+          createdByUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }],
+        take: 20,
+      }),
+      this.prisma.wasteRecord.findMany({
+        where: {
+          branchId,
+          ingredientId,
+        },
+        include: {
+          createdByUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }],
+        take: 10,
+      }),
+      this.prisma.recipeItem.findMany({
+        where: {
+          ingredientId,
+          recipe: {
+            branchId,
+          },
+        },
+        include: {
+          recipe: {
+            select: {
+              id: true,
+              name: true,
+              isActive: true,
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+              productVariant: {
+                select: {
+                  id: true,
+                  name: true,
+                  product: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }],
+        take: 30,
+      }),
+    ]);
+
+    return {
+      ingredient,
+      isLowStock: this.isLowStock(ingredient.currentStock, ingredient.lowStockThreshold),
+      recentMovements,
+      recentWasteRecords,
+      linkedRecipes: linkedRecipeItems.map((item) => ({
+        id: item.recipe.id,
+        name: item.recipe.name,
+        isActive: item.recipe.isActive,
+        quantityPerRecipe: item.quantity,
+        product: item.recipe.product,
+        productVariant: item.recipe.productVariant,
       })),
     };
   }
@@ -1497,6 +1658,15 @@ export class InventoryService {
     }
 
     return unit;
+  }
+
+  private isLowStock(currentStock: Prisma.Decimal | string | number, threshold: Prisma.Decimal | string | number) {
+    const stock = new Prisma.Decimal(currentStock);
+    const minThreshold = new Prisma.Decimal(threshold);
+    if (minThreshold.lessThanOrEqualTo(0)) {
+      return false;
+    }
+    return stock.lessThanOrEqualTo(minThreshold);
   }
 
   private async ensureIngredientInBranch(branchId: string, ingredientId: string) {

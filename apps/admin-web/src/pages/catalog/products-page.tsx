@@ -4,6 +4,7 @@ import {
   catalogCategoriesApi,
   catalogModifiersApi,
   catalogProductsApi,
+  stationsApi,
 } from '../../api';
 import type {
   Category,
@@ -13,6 +14,7 @@ import type {
   ProductType,
   ProductVariant,
 } from '../../api/catalog-types';
+import type { StationSummary } from '../../api/stations.api';
 import { toErrorMessage } from '../../app/error-utils';
 import { DataState, Modal, PageHeader, SectionCard, StatusBadge } from '../../components';
 
@@ -20,6 +22,7 @@ const emptyProductForm = {
   categoryId: '',
   name: '',
   description: '',
+  allergenTags: '',
   sku: '',
   imageUrl: '',
   basePrice: 0,
@@ -43,13 +46,18 @@ const emptyLinkForm = {
   sortOrder: 0,
 };
 
+type ProductStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'AVAILABLE' | 'UNAVAILABLE';
+
 export function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
+  const [stations, setStations] = useState<StationSummary[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilterId, setCategoryFilterId] = useState<'ALL' | string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>('ALL');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,20 +78,25 @@ export function ProductsPage() {
   const [linkForm, setLinkForm] = useState(emptyLinkForm);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkSubmitting, setLinkSubmitting] = useState(false);
+  const [routeStationId, setRouteStationId] = useState('');
+  const [routePending, setRoutePending] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
 
   const loadData = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const [categoryData, productData, modifierData] = await Promise.all([
+      const [categoryData, productData, modifierData, stationData] = await Promise.all([
         catalogCategoriesApi.list(),
         catalogProductsApi.list(),
         catalogModifiersApi.listGroups(),
+        stationsApi.list(),
       ]);
       setCategories(categoryData);
       setProducts(productData);
       setModifierGroups(modifierData);
+      setStations(stationData.filter((station) => station.isActive));
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
@@ -112,17 +125,30 @@ export function ProductsPage() {
     }
   }, [selectedProductId]);
 
+  useEffect(() => {
+    setRouteError(null);
+    setRouteStationId(selectedProduct?.stationRoute?.stationId ?? '');
+  }, [selectedProduct]);
+
   const filteredProducts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    const list = products.slice().sort((a, b) => a.sortOrder - b.sortOrder);
-    if (!term) return list;
-    return list.filter(
-      (product) =>
-        product.name.toLowerCase().includes(term) ||
-        (product.sku ?? '').toLowerCase().includes(term) ||
-        (product.category?.name ?? '').toLowerCase().includes(term),
-    );
-  }, [products, searchTerm]);
+    return products
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .filter((product) => {
+        if (categoryFilterId !== 'ALL' && product.categoryId !== categoryFilterId) return false;
+        if (statusFilter === 'ACTIVE' && !product.isActive) return false;
+        if (statusFilter === 'INACTIVE' && product.isActive) return false;
+        if (statusFilter === 'AVAILABLE' && !product.isAvailable) return false;
+        if (statusFilter === 'UNAVAILABLE' && product.isAvailable) return false;
+        if (!term) return true;
+        return (
+          product.name.toLowerCase().includes(term) ||
+          (product.sku ?? '').toLowerCase().includes(term) ||
+          (product.category?.name ?? '').toLowerCase().includes(term)
+        );
+      });
+  }, [products, searchTerm, categoryFilterId, statusFilter]);
 
   const openCreate = () => {
     setEditingProduct(null);
@@ -137,6 +163,7 @@ export function ProductsPage() {
       categoryId: product.categoryId,
       name: product.name,
       description: product.description ?? '',
+      allergenTags: (product.allergenTags ?? []).join(', '),
       sku: product.sku ?? '',
       imageUrl: product.imageUrl ?? '',
       basePrice: Number(product.basePrice),
@@ -154,10 +181,15 @@ export function ProductsPage() {
     setProductError(null);
 
     try {
+      const allergenTags = productForm.allergenTags
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean);
       const payload = {
         categoryId: productForm.categoryId,
         name: productForm.name.trim(),
         description: productForm.description.trim() || undefined,
+        allergenTags,
         sku: productForm.sku.trim() || undefined,
         imageUrl: productForm.imageUrl.trim() || undefined,
         basePrice: Number(productForm.basePrice),
@@ -347,10 +379,37 @@ export function ProductsPage() {
     }
   };
 
+  const saveRoute = async () => {
+    if (!selectedProduct) return;
+    setRoutePending(true);
+    setRouteError(null);
+    try {
+      if (!routeStationId) {
+        if (selectedProduct.stationRoute) {
+          await catalogProductsApi.removeStationRoute(selectedProduct.id);
+        }
+      } else if (selectedProduct.stationRoute) {
+        await catalogProductsApi.updateStationRoute(selectedProduct.id, { stationId: routeStationId });
+      } else {
+        await catalogProductsApi.createStationRoute(selectedProduct.id, { stationId: routeStationId });
+      }
+      await loadProductDetail(selectedProduct.id);
+      const refreshedProducts = await catalogProductsApi.list();
+      setProducts(refreshedProducts);
+    } catch (err) {
+      setRouteError(toErrorMessage(err));
+    } finally {
+      setRoutePending(false);
+    }
+  };
+
   const availableModifierGroups = useMemo(() => {
     const linkedIds = new Set(selectedProduct?.modifierGroupLinks?.map((link) => link.modifierGroupId));
     return modifierGroups.filter((group) => !linkedIds.has(group.id));
   }, [modifierGroups, selectedProduct]);
+
+  const variableNeedsVariants =
+    selectedProduct?.productType === 'VARIABLE' && (selectedProduct.variants?.length ?? 0) === 0;
 
   return (
     <div className="catalog-content">
@@ -372,6 +431,21 @@ export function ProductsPage() {
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
+            <select value={categoryFilterId} onChange={(event) => setCategoryFilterId(event.target.value)}>
+              <option value="ALL">All Categories</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ProductStatusFilter)}>
+              <option value="ALL">All Status</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="AVAILABLE">Available</option>
+              <option value="UNAVAILABLE">Unavailable</option>
+            </select>
           </div>
           <DataState
             isLoading={isLoading}
@@ -387,6 +461,10 @@ export function ProductsPage() {
                     <th>Name</th>
                     <th>Category</th>
                     <th>Base Price</th>
+                    <th>Variants</th>
+                    <th>Modifiers</th>
+                    <th>Allergens</th>
+                    <th>Routing</th>
                     <th>Status</th>
                     <th></th>
                   </tr>
@@ -406,6 +484,27 @@ export function ProductsPage() {
                       </td>
                       <td>{product.category?.name ?? '—'}</td>
                       <td>{formatCurrency(product.basePrice)}</td>
+                      <td>{product.variants?.length ?? 0}</td>
+                      <td>{product.modifierGroupLinks?.length ?? 0}</td>
+                      <td>
+                        <div className="badge-row">
+                          {(product.allergenTags ?? []).slice(0, 2).map((tag) => (
+                            <span key={tag} className="chip">
+                              {tag}
+                            </span>
+                          ))}
+                          {(product.allergenTags?.length ?? 0) > 2 ? (
+                            <span className="chip">+{(product.allergenTags?.length ?? 0) - 2}</span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td>
+                        <StatusBadge
+                          active={Boolean(product.stationRoute?.station)}
+                          activeLabel={product.stationRoute?.station?.code ?? 'Route Ready'}
+                          inactiveLabel="No Route"
+                        />
+                      </td>
                       <td>
                         <div className="badge-row">
                           <StatusBadge active={product.isActive} />
@@ -474,29 +573,90 @@ export function ProductsPage() {
             {!selectedProduct ? (
               <p className="muted">Select a product row to manage variants and modifier links.</p>
             ) : (
-              <div className="detail-grid">
-                <div>
-                  <strong>Category</strong>
-                  <p className="muted">{selectedProduct.category?.name ?? '—'}</p>
-                </div>
-                <div>
-                  <strong>Product Type</strong>
-                  <p className="muted">{selectedProduct.productType}</p>
-                </div>
-                <div>
-                  <strong>Base Price</strong>
-                  <p className="muted">{formatCurrency(selectedProduct.basePrice)}</p>
-                </div>
-                <div>
-                  <strong>Status</strong>
-                  <div className="badge-row">
-                    <StatusBadge active={selectedProduct.isActive} />
+              <>
+                {variableNeedsVariants ? (
+                  <p className="error">Variable products require at least one active variant.</p>
+                ) : null}
+                <div className="detail-grid">
+                  <div>
+                    <strong>Category</strong>
+                    <p className="muted">{selectedProduct.category?.name ?? '—'}</p>
+                  </div>
+                  <div>
+                    <strong>Product Type</strong>
+                    <p className="muted">{selectedProduct.productType}</p>
+                  </div>
+                  <div>
+                    <strong>Base Price</strong>
+                    <p className="muted">{formatCurrency(selectedProduct.basePrice)}</p>
+                  </div>
+                  <div>
+                    <strong>Status</strong>
+                    <div className="badge-row">
+                      <StatusBadge active={selectedProduct.isActive} />
+                      <StatusBadge
+                        active={selectedProduct.isAvailable}
+                        activeLabel="Available"
+                        inactiveLabel="Unavailable"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <strong>Allergens</strong>
+                    <div className="badge-row">
+                      {(selectedProduct.allergenTags ?? []).length === 0 ? (
+                        <span className="muted">No allergens</span>
+                      ) : (
+                        (selectedProduct.allergenTags ?? []).map((tag) => (
+                          <span key={tag} className="chip">
+                            {tag}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <strong>Station Route</strong>
+                    <p className="muted">
+                      {selectedProduct.stationRoute?.station
+                        ? `${selectedProduct.stationRoute.station.name} (${selectedProduct.stationRoute.station.code})`
+                        : 'Route missing'}
+                    </p>
+                  </div>
+                  <div>
+                    <strong>Route Readiness</strong>
                     <StatusBadge
-                      active={selectedProduct.isAvailable}
-                      activeLabel="Available"
-                      inactiveLabel="Unavailable"
+                      active={Boolean(selectedProduct.stationRoute?.station)}
+                      activeLabel="Ready"
+                      inactiveLabel="Needs Route"
                     />
                   </div>
+                </div>
+              </>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Station Routing" subtitle="Product -> Station mapping for kitchen/bar routing.">
+            {!selectedProduct ? (
+              <p className="muted">Select a product to manage routing.</p>
+            ) : (
+              <div className="form-grid">
+                <label>
+                  Station
+                  <select value={routeStationId} onChange={(event) => setRouteStationId(event.target.value)}>
+                    <option value="">No station route</option>
+                    {stations.map((station) => (
+                      <option key={station.id} value={station.id}>
+                        {station.name} ({station.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {routeError ? <p className="error">{routeError}</p> : null}
+                <div className="form-actions">
+                  <button type="button" onClick={saveRoute} disabled={routePending}>
+                    {routePending ? 'Saving Route...' : 'Save Route'}
+                  </button>
                 </div>
               </div>
             )}
@@ -575,6 +735,7 @@ export function ProductsPage() {
                     <tr>
                       <th>Group</th>
                       <th>Required</th>
+                      <th>Rule</th>
                       <th>Sort</th>
                       <th></th>
                     </tr>
@@ -584,6 +745,15 @@ export function ProductsPage() {
                       <tr key={link.id}>
                         <td>{link.modifierGroup?.name ?? '—'}</td>
                         <td>{link.isRequired ? 'Yes' : 'No'}</td>
+                        <td>
+                          {link.modifierGroup ? (
+                            <span className="muted">
+                              {link.modifierGroup.selectionType} • min {link.modifierGroup.minSelect} / max {link.modifierGroup.maxSelect}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td>{link.sortOrder}</td>
                         <td className="table-actions">
                           <button type="button" className="secondary" onClick={() => openLinkEdit(link)}>
@@ -640,6 +810,16 @@ export function ProductsPage() {
                   setProductForm((prev) => ({ ...prev, description: event.target.value }))
                 }
                 placeholder="Optional notes"
+              />
+            </label>
+            <label>
+              Allergens (comma separated)
+              <input
+                value={productForm.allergenTags}
+                onChange={(event) =>
+                  setProductForm((prev) => ({ ...prev, allergenTags: event.target.value }))
+                }
+                placeholder="Gluten, Milk, Egg"
               />
             </label>
             <div className="form-row">

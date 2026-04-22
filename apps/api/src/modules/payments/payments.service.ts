@@ -63,34 +63,45 @@ export class PaymentsService {
   async openRegisterShift(branchId: string, actorUserId: string, dto: OpenRegisterShiftDto) {
     const openingCashAmount = new Prisma.Decimal(dto.openingCashAmount);
 
-    const shift = await this.prisma.$transaction(async (tx) => {
-      // Policy: one OPEN shift per user per branch to avoid double-cashier sessions.
-      const existingOpenShift = await tx.registerShift.findFirst({
-        where: {
-          branchId,
-          openedByUserId: actorUserId,
-          status: RegisterShiftStatus.OPEN,
-        },
-        select: {
-          id: true,
-        },
-      });
+    let shift: { id: string };
+    try {
+      shift = await this.prisma.$transaction(async (tx) => {
+        // Policy: one OPEN shift per user per branch to avoid double-cashier sessions.
+        const existingOpenShift = await tx.registerShift.findFirst({
+          where: {
+            branchId,
+            openedByUserId: actorUserId,
+            status: RegisterShiftStatus.OPEN,
+          },
+          select: {
+            id: true,
+          },
+        });
 
-      if (existingOpenShift) {
+        if (existingOpenShift) {
+          throw new ConflictException('User already has an OPEN register shift in this branch');
+        }
+
+        return tx.registerShift.create({
+          data: {
+            branchId,
+            openedByUserId: actorUserId,
+            openingCashAmount,
+            status: RegisterShiftStatus.OPEN,
+            notes: dto.notes,
+            openedAt: new Date(),
+          },
+          select: {
+            id: true,
+          },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('User already has an OPEN register shift in this branch');
       }
-
-      return tx.registerShift.create({
-        data: {
-          branchId,
-          openedByUserId: actorUserId,
-          openingCashAmount,
-          status: RegisterShiftStatus.OPEN,
-          notes: dto.notes,
-          openedAt: new Date(),
-        },
-      });
-    });
+      throw error;
+    }
 
     await this.auditService.logAction({
       userId: actorUserId,

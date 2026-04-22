@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { UpdateProductionTicketItemStatusDto } from './dto/update-production-ticket-item-status.dto';
 import { ProductionService } from './production.service';
 
@@ -16,7 +17,7 @@ export class ProductionTicketItemsController {
 
   @Patch(':id/status')
   updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateProductionTicketItemStatusDto,
     @CurrentUser() user: AuthUser,
   ) {

@@ -9,6 +9,7 @@ import {
   OrderItemStatus,
   OrderStatus,
   Prisma,
+  ProductType,
   ServiceType,
   TableSessionStatus,
 } from '@prisma/client';
@@ -80,6 +81,21 @@ export class OrdersService {
       dto.tableSessionId,
     );
 
+    if (dto.customerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: {
+          id: dto.customerId,
+          branchId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      if (!customer) {
+        throw new NotFoundException('Customer not found in current branch');
+      }
+    }
+
     const order = await this.createOrderWithSequence(branchId, actor.sub, dto, tableSession?.id);
 
     await this.auditService.logAction({
@@ -125,6 +141,13 @@ export class OrdersService {
             table: true,
           },
         },
+        customer: {
+          select: {
+            id: true,
+            fullName: true,
+            phonePrimary: true,
+          },
+        },
         events: {
           orderBy: {
             createdAt: 'asc',
@@ -149,6 +172,13 @@ export class OrdersService {
         tableSessionId: query.tableSessionId,
       },
       include: {
+        customer: {
+          select: {
+            id: true,
+            fullName: true,
+            phonePrimary: true,
+          },
+        },
         items: {
           where: {
             status: OrderItemStatus.ACTIVE,
@@ -175,6 +205,29 @@ export class OrdersService {
 
     const order = await this.getOrderForMutation(branchId, orderId, actor);
 
+    const stationCode = dto.stationCode?.trim().toUpperCase();
+    let stationId: string | null = null;
+
+    if (stationCode) {
+      const station = await this.prisma.station.findFirst({
+        where: {
+          branchId,
+          code: stationCode,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          code: true,
+        },
+      });
+
+      if (!station) {
+        throw new BadRequestException(`Station not found or inactive for code: ${stationCode}`);
+      }
+
+      stationId = station.id;
+    }
+
     const quantity = new Prisma.Decimal(dto.quantity);
     const unitPrice = new Prisma.Decimal(dto.unitPrice);
     const lineTotal = quantity.mul(unitPrice);
@@ -189,6 +242,7 @@ export class OrdersService {
           variantNameSnapshot: null,
           baseProductPriceSnapshot: null,
           variantPriceDeltaSnapshot: null,
+          stationId,
           quantity,
           unitPrice,
           lineTotal,
@@ -207,6 +261,7 @@ export class OrdersService {
           quantity: quantity.toString(),
           unitPrice: unitPrice.toString(),
           lineTotal: lineTotal.toString(),
+          stationCode,
         },
       });
 
@@ -221,6 +276,7 @@ export class OrdersService {
         orderId: order.id,
         itemId: result.id,
         entryType: 'manual',
+        stationCode,
       },
     });
 
@@ -867,6 +923,7 @@ export class OrdersService {
               serviceType: dto.serviceType,
               status: OrderStatus.DRAFT,
               orderNumber,
+              customerId: dto.customerId,
               customerName: dto.customerName,
               customerPhone: dto.customerPhone,
               notes: dto.notes,
@@ -954,6 +1011,14 @@ export class OrdersService {
       priceDelta: Prisma.Decimal;
       isActive: boolean;
     } | null = null;
+
+    if (product.productType === ProductType.VARIABLE && !input.variantId) {
+      throw new BadRequestException('Variant selection is required for variable products');
+    }
+
+    if (product.productType === ProductType.SIMPLE && input.variantId) {
+      throw new BadRequestException('Simple products cannot receive variant selection');
+    }
 
     if (input.variantId) {
       const foundVariant = await this.prisma.productVariant.findFirst({

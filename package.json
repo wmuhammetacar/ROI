@@ -11,7 +11,7 @@
     "dev:pos": "pnpm run build:shared && pnpm --filter @roi/pos-web dev",
     "dev:kitchen": "pnpm run build:shared && pnpm --filter @roi/kitchen-display dev",
     "dev:qr": "pnpm run build:shared && pnpm --filter @roi/qr-web dev",
-    "dev:all": "pnpm run build:shared && pnpm -r --parallel --filter ./apps/* dev",
+    "dev:all": "pnpm run build:shared && CHOKIDAR_USEPOLLING=1 CHOKIDAR_INTERVAL=350 pnpm -r --parallel --filter @roi/api --filter @roi/admin-web --filter @roi/pos-web --filter @roi/kitchen-display --filter @roi/qr-web dev",
     "build": "pnpm -r build",
     "build:shared": "pnpm --filter @roi/shared-types build && pnpm --filter @roi/shared-utils build && pnpm --filter @roi/api-client build",
     "build:api": "pnpm --filter @roi/api build",
@@ -20,6 +20,7 @@
     "prisma:migrate": "pnpm --filter @roi/api prisma:migrate",
     "prisma:deploy": "pnpm --filter @roi/api prisma:deploy",
     "prisma:seed": "pnpm --filter @roi/api prisma:seed",
-    "create:superadmin": "node scripts/create-superadmin.cjs"
+    "create:superadmin": "node scripts/create-superadmin.cjs",
+    "smoke:phase10": "bash scripts/smoke/phase10-launch-smoke.sh"
   }
 }

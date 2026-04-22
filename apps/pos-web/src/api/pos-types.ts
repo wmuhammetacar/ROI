@@ -100,6 +100,7 @@ export interface PosCatalogProduct {
   categoryId: string;
   name: string;
   description: string | null;
+  allergenTags: string[];
   sku: string | null;
   imageUrl: string | null;
   basePrice: string | number;
@@ -125,6 +126,7 @@ export interface PosCatalogResponse {
   filters: {
     includeInactive: boolean;
     includeUnavailable: boolean;
+    routeSafe?: boolean;
   };
   categories: PosCatalogCategory[];
 }

@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { OpenTableSessionDto } from './dto/open-table-session.dto';
 import { TableSessionsService } from './table-sessions.service';
 
@@ -20,17 +21,17 @@ export class TableSessionsController {
   }
 
   @Post(':id/close')
-  close(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  close(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.tableSessionsService.close(user.branchId, id, user.sub);
   }
 
   @Get('open/by-table/:tableId')
-  findOpenByTable(@Param('tableId') tableId: string, @CurrentUser() user: AuthUser) {
+  findOpenByTable(@Param('tableId', ParseCuidPipe) tableId: string, @CurrentUser() user: AuthUser) {
     return this.tableSessionsService.findOpenByTable(user.branchId, tableId);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  findById(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.tableSessionsService.findById(user.branchId, id);
   }
 }

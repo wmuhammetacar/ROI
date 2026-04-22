@@ -39,6 +39,7 @@ export interface PosCatalogProduct {
   categoryId: string;
   name: string;
   description: string | null;
+  allergenTags: string[];
   imageUrl: string | null;
   basePrice: string | number;
   sortOrder: number;
@@ -58,6 +59,7 @@ export interface PosCatalogCategory {
 export interface PublicMenuResponse {
   context: {
     branchId: string;
+    branchName: string;
     tableId: string | null;
     tableName: string | null;
     tableStatus: TableStatus | null;
@@ -102,4 +104,24 @@ export interface PublicOrderSubmissionResponse {
   grandTotal: string | number;
   createdAt: string;
   idempotentReplay?: boolean;
+}
+
+export type PublicWaiterCallType = 'WAITER' | 'BILL' | 'SERVICE';
+
+export interface PublicCreateWaiterCallPayload {
+  branchId: string;
+  tableId: string;
+  callType: PublicWaiterCallType;
+  note?: string;
+}
+
+export interface PublicWaiterCallResponse {
+  id: string;
+  branchId: string;
+  tableId: string;
+  tableName: string | null;
+  status: 'PENDING' | 'RESOLVED';
+  callType: PublicWaiterCallType;
+  requestedAt: string;
+  note?: string | null;
 }

@@ -25,9 +25,29 @@ export interface Ingredient {
   unitId: string;
   unit: UnitOfMeasure;
   currentStock: string | number;
+  lowStockThreshold: string | number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface IngredientDetail {
+  ingredient: Ingredient;
+  isLowStock: boolean;
+  recentMovements: StockMovement[];
+  recentWasteRecords: WasteRecord[];
+  linkedRecipes: Array<{
+    id: string;
+    name: string;
+    isActive: boolean;
+    quantityPerRecipe: string | number;
+    product?: { id: string; name: string } | null;
+    productVariant?: {
+      id: string;
+      name: string;
+      product?: { id: string; name: string } | null;
+    } | null;
+  }>;
 }
 
 export interface WasteRecord {
@@ -107,6 +127,9 @@ export interface InventorySummaryItem {
   name: string;
   sku: string | null;
   currentStock: string | number;
+  lowStockThreshold: string | number;
+  isLowStock: boolean;
+  recipeUsageCount: number;
   isActive: boolean;
   unit: UnitOfMeasure;
   latestMovementAt: string | null;
@@ -117,6 +140,10 @@ export interface InventorySummary {
   generatedAt: string;
   totalIngredients: number;
   activeIngredients: number;
+  inactiveIngredients: number;
+  lowStockCount: number;
+  recentMovementCount24h: number;
+  recipeCoverageCount: number;
   items: InventorySummaryItem[];
 }
 

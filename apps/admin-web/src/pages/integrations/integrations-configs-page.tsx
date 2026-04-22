@@ -17,7 +17,7 @@ const emptyFormState = {
   branchId: '',
   providerId: '',
   status: 'INACTIVE' as BranchIntegrationConfigStatus,
-  credentialsText: '{}',
+  credentialsText: '',
   settingsText: '{}',
 };
 
@@ -103,7 +103,7 @@ export function IntegrationsConfigsPage() {
       branchId: config.branchId,
       providerId: config.providerId,
       status: config.status,
-      credentialsText: JSON.stringify(config.credentialsJson ?? {}, null, 2),
+      credentialsText: '',
       settingsText: JSON.stringify(config.settingsJson ?? {}, null, 2),
     });
     setIsModalOpen(true);
@@ -123,7 +123,8 @@ export function IntegrationsConfigsPage() {
     setFormError(null);
 
     try {
-      const credentialsJson = parseJsonField(formState.credentialsText);
+      const shouldUpdateCredentials = formState.credentialsText.trim().length > 0;
+      const credentialsJson = shouldUpdateCredentials ? parseJsonField(formState.credentialsText) : undefined;
       const settingsJson = parseJsonField(formState.settingsText);
 
       if (editingConfig) {
@@ -221,6 +222,7 @@ export function IntegrationsConfigsPage() {
                   <th>Provider</th>
                   <th>Branch</th>
                   <th>Status</th>
+                  <th>Credentials</th>
                   <th>Last Sync</th>
                   <th>Updated</th>
                   <th></th>
@@ -234,6 +236,7 @@ export function IntegrationsConfigsPage() {
                     <td>
                       <ConfigStatusBadge value={config.status} />
                     </td>
+                    <td>{config.credentialsMasked ?? (config.hasCredentials ? '****' : '—')}</td>
                     <td>{formatDate(config.lastSyncAt)}</td>
                     <td>{formatDate(config.updatedAt)}</td>
                     <td>
@@ -320,10 +323,11 @@ export function IntegrationsConfigsPage() {
               </select>
             </label>
             <label>
-              Credentials JSON
+              Credentials JSON {editingConfig ? '(leave empty to keep existing)' : ''}
               <textarea
                 className="integration-json-input"
                 spellCheck={false}
+                placeholder={editingConfig ? 'Enter new credentials to rotate secret' : '{"apiKey":"..."}'}
                 value={formState.credentialsText}
                 onChange={(event) =>
                   setFormState((prev) => ({ ...prev, credentialsText: event.target.value }))
@@ -375,9 +379,9 @@ export function IntegrationsConfigsPage() {
             <p className="muted">Last Sync: {formatDate(detailConfig.lastSyncAt)}</p>
             <p className="muted">Updated: {formatDate(detailConfig.updatedAt)}</p>
             <div>
-              <p className="muted">Credentials JSON</p>
+              <p className="muted">Credentials</p>
               <pre className="integration-json-view">
-                {JSON.stringify(detailConfig.credentialsJson ?? {}, null, 2)}
+                {detailConfig.credentialsMasked ?? (detailConfig.hasCredentials ? '****' : 'No credentials')}
               </pre>
             </div>
             <div>

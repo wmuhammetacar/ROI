@@ -114,6 +114,9 @@ export function TablesPage() {
         [POS_REALTIME_EVENTS.ORDER_CREATED]: () => {
           void load();
         },
+        [POS_REALTIME_EVENTS.TABLE_UPDATED]: () => {
+          void load();
+        },
         [POS_REALTIME_EVENTS.ORDER_STATUS_CHANGED]: () => {
           void load();
         },

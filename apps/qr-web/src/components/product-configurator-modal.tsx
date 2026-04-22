@@ -99,8 +99,20 @@ export function ProductConfiguratorModal({ product, onClose, onAdd }: ProductCon
 
   return (
     <Modal title={product.name} onClose={onClose}>
-      <div className="form-grid">
+      <div className="form-grid product-config-content">
         <p className="muted">{product.description ?? 'No additional description.'}</p>
+        {product.allergenTags.length > 0 ? (
+          <div className="selector-block allergen-block">
+            <strong>Allergens</strong>
+            <div className="allergen-row">
+              {product.allergenTags.map((tag) => (
+                <span key={tag} className="allergen-chip">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {product.variants.length > 0 ? (
           <div className="selector-block">

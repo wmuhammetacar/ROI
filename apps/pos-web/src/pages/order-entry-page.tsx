@@ -57,6 +57,7 @@ export function OrderEntryPage() {
 
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [isSendingToStation, setIsSendingToStation] = useState(false);
+  const [isProductAddPending, setIsProductAddPending] = useState(false);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [sessionGuestCount, setSessionGuestCount] = useState(2);
   const [sessionNotes, setSessionNotes] = useState('');
@@ -76,7 +77,7 @@ export function OrderEntryPage() {
     setIsLoadingCatalog(true);
     setCatalogError(null);
     try {
-      const response = await posCatalogApi.getPosProducts();
+      const response = await posCatalogApi.getPosProducts({ routeSafe: true });
       setCatalog(response.categories ?? []);
       if (!selectedCategoryId && response.categories.length > 0) {
         setSelectedCategoryId(response.categories[0].id);
@@ -213,6 +214,13 @@ export function OrderEntryPage() {
           void refreshOrder();
         }
       },
+      [POS_REALTIME_EVENTS.ORDER_SENT]: (event: { payload: Record<string, unknown> }) => {
+        const payloadOrderId =
+          typeof event.payload.orderId === 'string' ? event.payload.orderId : null;
+        if (order && payloadOrderId === order.id) {
+          void refreshOrder();
+        }
+      },
       [POS_REALTIME_EVENTS.PAYMENT_RECORDED]: (event: { payload: Record<string, unknown> }) => {
         const payloadOrderId =
           typeof event.payload.orderId === 'string' ? event.payload.orderId : null;
@@ -292,16 +300,47 @@ export function OrderEntryPage() {
     }
   }, [order, refreshOrder]);
 
+  const ensureEditableOrder = useCallback(async () => {
+    if (!tableSession) {
+      setOrderError('Cannot add items without an open table session.');
+      return null;
+    }
+
+    let targetOrder = order;
+
+    if (!targetOrder) {
+      setIsCreatingOrder(true);
+      try {
+        targetOrder = await ordersApi.create({ serviceType: 'DINE_IN', tableSessionId: tableSession.id });
+        setOrder(targetOrder);
+        setOrderPayments(null);
+      } catch (err) {
+        setOrderError(err instanceof Error ? err.message : 'Failed to create order.');
+        return null;
+      } finally {
+        setIsCreatingOrder(false);
+      }
+    }
+
+    if (!ORDER_EDITABLE_STATUSES.has(targetOrder.status)) {
+      setOrderError('Order is locked for edits by backend order rules.');
+      return null;
+    }
+
+    return targetOrder;
+  }, [order, tableSession]);
+
   const openConfig = useCallback(
     (product: PosCatalogProduct, item?: OrderItem) => {
       setConfigProduct(product);
       setEditingItem(item ?? null);
       setConfigQuantity(item ? Number(item.quantity) : 1);
       setConfigNotes(item?.notes ?? '');
+      const activeVariants = product.variants.filter((variant) => variant.isActive);
       if (item?.variantId) {
         setConfigVariantId(item.variantId);
-      } else if (product.variants.length === 1) {
-        setConfigVariantId(product.variants[0].id);
+      } else if (activeVariants.length === 1) {
+        setConfigVariantId(activeVariants[0].id);
       } else {
         setConfigVariantId(null);
       }
@@ -332,6 +371,7 @@ export function OrderEntryPage() {
 
   const handleToggleOption = useCallback(
     (group: PosCatalogModifierGroup, optionId: string) => {
+      let nextError: string | null = null;
       setConfigSelections((prev) => {
         const current = prev[group.id] ?? [];
         if (group.selectionType === 'SINGLE') {
@@ -340,8 +380,13 @@ export function OrderEntryPage() {
         if (current.includes(optionId)) {
           return { ...prev, [group.id]: current.filter((id) => id !== optionId) };
         }
+        if (current.length >= group.maxSelect) {
+          nextError = `${group.name} allows at most ${group.maxSelect} selections.`;
+          return prev;
+        }
         return { ...prev, [group.id]: [...current, optionId] };
       });
+      setConfigError(nextError);
     },
     [],
   );
@@ -359,15 +404,18 @@ export function OrderEntryPage() {
       const group = link.modifierGroup;
       if (!group.isActive) return;
       const selected = configSelections[group.id] ?? [];
-      const minRequired = Math.max(group.minSelect ?? 0, link.isRequired ? 1 : 0);
-      if (selected.length < minRequired) {
-        errors.push(`${group.name} requires at least ${minRequired} selection(s).`);
+      const requiredMinimumSelection = link.isRequired ? Math.max(1, group.minSelect ?? 0) : 0;
+      if (selected.length < requiredMinimumSelection) {
+        errors.push(`${group.name} requires at least ${requiredMinimumSelection} selection(s).`);
       }
       if (selected.length > group.maxSelect) {
         errors.push(`${group.name} allows at most ${group.maxSelect} selection(s).`);
       }
       if (group.selectionType === 'SINGLE' && selected.length > 1) {
         errors.push(`${group.name} allows only one selection.`);
+      }
+      if (selected.length > 0 && selected.length < group.minSelect) {
+        errors.push(`${group.name} requires at least ${group.minSelect} selections when used.`);
       }
       const activeOptions = getActiveOptions(group).map((option) => option.id);
       const filtered = selected.filter((optionId) => activeOptions.includes(optionId));
@@ -380,7 +428,7 @@ export function OrderEntryPage() {
   }, [configProduct, configSelections]);
 
   const handleSubmitConfig = useCallback(async () => {
-    if (!order || !configProduct) return;
+    if (!configProduct) return;
     if (configQuantity <= 0) {
       setConfigError('Quantity must be greater than 0.');
       return;
@@ -395,8 +443,13 @@ export function OrderEntryPage() {
     setIsConfigSubmitting(true);
     setConfigError(null);
     try {
+      const targetOrder = await ensureEditableOrder();
+      if (!targetOrder) {
+        return;
+      }
+
       if (editingItem) {
-        await ordersApi.updateCatalogItem(order.id, editingItem.id, {
+        await ordersApi.updateCatalogItem(targetOrder.id, editingItem.id, {
           productId: configProduct.id,
           variantId: configVariantId,
           quantity: configQuantity,
@@ -404,7 +457,7 @@ export function OrderEntryPage() {
           modifierSelections: payload,
         });
       } else {
-        await ordersApi.addCatalogItem(order.id, {
+        await ordersApi.addCatalogItem(targetOrder.id, {
           productId: configProduct.id,
           variantId: configVariantId,
           quantity: configQuantity,
@@ -427,7 +480,7 @@ export function OrderEntryPage() {
     configQuantity,
     configVariantId,
     editingItem,
-    order,
+    ensureEditableOrder,
     refreshOrder,
   ]);
 
@@ -446,15 +499,59 @@ export function OrderEntryPage() {
   );
 
   const handleQuickAdd = useCallback(
-    (product: PosCatalogProduct) => {
-      if (!isOrderEditable) return;
-      if (product.variants.length === 0 && product.modifierGroupLinks.length === 0) {
+    async (product: PosCatalogProduct) => {
+      if (product.variants.length > 0 || product.modifierGroupLinks.length > 0) {
         openConfig(product);
-      } else {
-        openConfig(product);
+        return;
+      }
+
+      setOrderError(null);
+      setIsProductAddPending(true);
+      try {
+        const targetOrder = await ensureEditableOrder();
+        if (!targetOrder) {
+          return;
+        }
+
+        await ordersApi.addCatalogItem(targetOrder.id, {
+          productId: product.id,
+          quantity: 1,
+        });
+        await refreshOrder();
+      } catch (err) {
+        setOrderError(err instanceof Error ? err.message : 'Failed to add product.');
+      } finally {
+        setIsProductAddPending(false);
       }
     },
-    [isOrderEditable, openConfig],
+    [ensureEditableOrder, openConfig, refreshOrder],
+  );
+
+  const handleAdjustQuantity = useCallback(
+    async (item: OrderItem, nextQuantity: number) => {
+      if (!order) return;
+      if (nextQuantity <= 0) {
+        await handleRemoveItem(item);
+        return;
+      }
+      if (!ORDER_EDITABLE_STATUSES.has(order.status)) {
+        setOrderError('Order is locked for edits by backend order rules.');
+        return;
+      }
+
+      setOrderError(null);
+      try {
+        if (!item.productId) {
+          setOrderError('Legacy manual items are read-only in waiter menu flow.');
+          return;
+        }
+        await ordersApi.updateCatalogItem(order.id, item.id, { quantity: nextQuantity });
+        await refreshOrder();
+      } catch (err) {
+        setOrderError(err instanceof Error ? err.message : 'Failed to update quantity.');
+      }
+    },
+    [handleRemoveItem, order, refreshOrder],
   );
 
   const getProductForItem = useCallback(
@@ -477,8 +574,42 @@ export function OrderEntryPage() {
     );
   }, [configProduct]);
 
+  const configValidationErrors = useMemo(() => {
+    if (!configProduct) return [] as string[];
+    const issues: string[] = [];
+    const activeVariants = configProduct.variants.filter((variant) => variant.isActive);
+    if (activeVariants.length > 0 && !configVariantId) {
+      issues.push('Please select a variant.');
+    }
+    for (const link of configLinks) {
+      const group = link.modifierGroup;
+      if (!group.isActive) continue;
+      const selected = configSelections[group.id] ?? [];
+      const requiredMinimumSelection = link.isRequired ? Math.max(1, group.minSelect ?? 0) : 0;
+
+      if (selected.length < requiredMinimumSelection) {
+        issues.push(`${group.name} requires at least ${requiredMinimumSelection} selection(s).`);
+      }
+      if (selected.length > group.maxSelect) {
+        issues.push(`${group.name} allows at most ${group.maxSelect} selection(s).`);
+      }
+      if (group.selectionType === 'SINGLE' && selected.length > 1) {
+        issues.push(`${group.name} allows only one selection.`);
+      }
+      if (selected.length > 0 && selected.length < group.minSelect) {
+        issues.push(`${group.name} requires at least ${group.minSelect} selections when used.`);
+      }
+    }
+    return issues;
+  }, [configLinks, configProduct, configSelections, configVariantId]);
+
   const paidTotal = Number(orderPayments?.financial.netPaidTotal ?? 0);
   const outstanding = Number(orderPayments?.financial.outstandingBalance ?? order?.grandTotal ?? 0);
+  const orderItemCount = useMemo(
+    () => (order ? order.items.reduce((acc, item) => acc + Number(item.quantity ?? 0), 0) : 0),
+    [order],
+  );
+  const canMutateOrder = Boolean(tableSession) && (!order || isOrderEditable);
 
   const editableNotice = order && !isOrderEditable ? 'Order is locked for edits by backend order rules.' : null;
   const paidNotice = order?.status === 'PAID' ? 'Order is fully paid. Item edits are disabled.' : null;
@@ -556,6 +687,44 @@ export function OrderEntryPage() {
         ) : null}
 
         {tableSession ? (
+          <div className="service-toolbar">
+            <div className="service-kpis">
+              <div>
+                <span className="muted">Session</span>
+                <strong>{tableSession.status}</strong>
+              </div>
+              <div>
+                <span className="muted">Order</span>
+                <strong>{order?.status ?? 'NOT_CREATED'}</strong>
+              </div>
+              <div>
+                <span className="muted">Items</span>
+                <strong>{orderItemCount}</strong>
+              </div>
+              <div>
+                <span className="muted">Total</span>
+                <strong>{formatMoney(order?.grandTotal ?? 0)}</strong>
+              </div>
+            </div>
+            <div className="service-actions">
+              <button
+                type="button"
+                className="primary touch-button"
+                disabled={!order || !isOrderEditable || isSendingToStation}
+                onClick={handleSendToStation}
+              >
+                {isSendingToStation ? 'Sending...' : 'Send to Station'}
+              </button>
+              {order ? (
+                <button type="button" className="ghost touch-button" onClick={handleOpenPayments}>
+                  Open Payments
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {tableSession ? (
           <div className="catalog-panel">
             <div className="panel-header">
               <div>
@@ -593,11 +762,14 @@ export function OrderEntryPage() {
                   key={product.id}
                   type="button"
                   className="product-card"
-                  onClick={() => handleQuickAdd(product)}
-                  disabled={!isOrderEditable}
+                  onClick={() => void handleQuickAdd(product)}
+                  disabled={!canMutateOrder || isProductAddPending}
                 >
                   <strong>{product.name}</strong>
                   <span className="muted">Base: {formatMoney(product.basePrice)}</span>
+                  {product.allergenTags.length > 0 ? (
+                    <span className="muted">{product.allergenTags.slice(0, 3).join(' • ')}</span>
+                  ) : null}
                   {product.variants.length > 0 ? <span className="pill">Variants</span> : null}
                   {product.modifierGroupLinks.length > 0 ? <span className="pill">Modifiers</span> : null}
                 </button>
@@ -662,8 +834,14 @@ export function OrderEntryPage() {
                     <div className="order-item-meta">
                       <span>x{item.quantity}</span>
                       <span>{formatMoney(item.lineTotal)}</span>
-                      {isOrderEditable ? (
+                      {isOrderEditable && Boolean(item.productId) ? (
                         <div className="order-item-actions">
+                          <button type="button" onClick={() => void handleAdjustQuantity(item, Number(item.quantity) - 1)}>
+                            -1
+                          </button>
+                          <button type="button" onClick={() => void handleAdjustQuantity(item, Number(item.quantity) + 1)}>
+                            +1
+                          </button>
                           <button type="button" onClick={() => product && openConfig(product, item)} disabled={!product}>
                             Edit
                           </button>
@@ -706,9 +884,6 @@ export function OrderEntryPage() {
                 <span className="muted">Outstanding</span>
                 <strong>{formatMoney(outstanding)}</strong>
               </div>
-              <button type="button" className="ghost touch-button" onClick={handleOpenPayments}>
-                Open Payments
-              </button>
             </div>
           ) : null}
 
@@ -738,7 +913,7 @@ export function OrderEntryPage() {
               type="button"
               className="primary"
               onClick={handleSubmitConfig}
-              disabled={isConfigSubmitting || !order || !isOrderEditable}
+              disabled={isConfigSubmitting || !canMutateOrder || configValidationErrors.length > 0}
             >
               {isConfigSubmitting ? 'Saving...' : editingItem ? 'Update Item' : 'Add Item'}
             </button>
@@ -751,6 +926,19 @@ export function OrderEntryPage() {
               <span>Base price</span>
               <strong>{formatMoney(configProduct.basePrice)}</strong>
             </div>
+
+            {configProduct.allergenTags.length > 0 ? (
+              <div className="field">
+                <span>Allergens</span>
+                <div className="chip-row">
+                  {configProduct.allergenTags.map((tag) => (
+                    <span key={tag} className="allergen-chip">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {configProduct.variants.length > 0 ? (
               <div className="field">
@@ -780,14 +968,14 @@ export function OrderEntryPage() {
               if (!group.isActive) return null;
               const options = getActiveOptions(group);
               const selected = configSelections[group.id] ?? [];
-              const minRequired = Math.max(group.minSelect ?? 0, link.isRequired ? 1 : 0);
+              const requiredMinimumSelection = link.isRequired ? Math.max(1, group.minSelect ?? 0) : 0;
 
               return (
                 <div key={group.id} className="field">
                   <div className="field-header">
                     <span>{group.name}</span>
                     <span className="muted">
-                      {group.selectionType === 'SINGLE' ? 'Single' : 'Multiple'} | Min {minRequired} / Max {group.maxSelect}
+                      {group.selectionType === 'SINGLE' ? 'Single' : 'Multiple'} | Required Min {requiredMinimumSelection} / Max {group.maxSelect}
                     </span>
                   </div>
                   <div className="option-list">
@@ -823,6 +1011,7 @@ export function OrderEntryPage() {
               <textarea value={configNotes} onChange={(event) => setConfigNotes(event.target.value)} />
             </label>
 
+            {configValidationErrors.length > 0 ? <p className="error">{configValidationErrors[0]}</p> : null}
             {configError ? <p className="error">{configError}</p> : null}
 
             {configVariant ? (

@@ -28,12 +28,27 @@ export interface AddCatalogItemPayload {
   modifierSelections?: CatalogModifierSelectionInput[];
 }
 
+export interface AddManualItemPayload {
+  productNameSnapshot: string;
+  quantity: number;
+  unitPrice: number;
+  stationCode?: string;
+  notes?: string;
+}
+
 export interface UpdateCatalogItemPayload {
   productId?: string;
   variantId?: string | null;
   quantity?: number;
   notes?: string;
   modifierSelections?: CatalogModifierSelectionInput[];
+}
+
+export interface UpdateManualItemPayload {
+  productNameSnapshot?: string;
+  quantity?: number;
+  unitPrice?: number;
+  notes?: string;
 }
 
 export function createOrdersApi(client: ApiClient) {
@@ -56,14 +71,20 @@ export function createOrdersApi(client: ApiClient) {
     addCatalogItem(orderId: string, payload: AddCatalogItemPayload) {
       return client.post<Order>(`/orders/${orderId}/items/catalog`, payload);
     },
+    addItem(orderId: string, payload: AddManualItemPayload) {
+      return client.post<Order>(`/orders/${orderId}/items`, payload);
+    },
     updateCatalogItem(orderId: string, itemId: string, payload: UpdateCatalogItemPayload) {
       return client.patch<Order>(`/orders/${orderId}/items/${itemId}/catalog`, payload);
+    },
+    updateItem(orderId: string, itemId: string, payload: UpdateManualItemPayload) {
+      return client.patch<Order>(`/orders/${orderId}/items/${itemId}`, payload);
     },
     removeItem(orderId: string, itemId: string) {
       return client.delete<Order>(`/orders/${orderId}/items/${itemId}`);
     },
     sendToStation(orderId: string) {
-      return client.post<ApiMessage>(`/orders/${orderId}/send-to-station`);
+      return client.post<ApiMessage>(`/orders/${orderId}/send`);
     },
   };
 }

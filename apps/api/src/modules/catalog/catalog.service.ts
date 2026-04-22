@@ -9,6 +9,7 @@ export class CatalogService {
   async getPosProducts(branchId: string, query: GetPosProductsDto) {
     const includeInactive = query.includeInactive === 'true';
     const includeUnavailable = query.includeUnavailable === 'true';
+    const routeSafe = query.routeSafe === 'true';
 
     const categories = await this.prisma.category.findMany({
       where: {
@@ -19,6 +20,17 @@ export class CatalogService {
             branchId,
             isActive: includeInactive ? undefined : true,
             isAvailable: includeUnavailable ? undefined : true,
+            stationRoute: routeSafe
+              ? {
+                  is: {
+                    branchId,
+                    station: {
+                      branchId,
+                      isActive: true,
+                    },
+                  },
+                }
+              : undefined,
           },
         },
       },
@@ -29,6 +41,17 @@ export class CatalogService {
             branchId,
             isActive: includeInactive ? undefined : true,
             isAvailable: includeUnavailable ? undefined : true,
+            stationRoute: routeSafe
+              ? {
+                  is: {
+                    branchId,
+                    station: {
+                      branchId,
+                      isActive: true,
+                    },
+                  },
+                }
+              : undefined,
           },
           orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
           include: {
@@ -67,6 +90,19 @@ export class CatalogService {
                 variant: true,
               },
             },
+            stationRoute: routeSafe
+              ? {
+                  include: {
+                    station: {
+                      select: {
+                        id: true,
+                        code: true,
+                        isActive: true,
+                      },
+                    },
+                  },
+                }
+              : false,
           },
         },
       },
@@ -77,6 +113,7 @@ export class CatalogService {
       filters: {
         includeInactive,
         includeUnavailable,
+        routeSafe,
       },
       categories,
     };

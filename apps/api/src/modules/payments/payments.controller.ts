@@ -5,6 +5,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { ReadBranchScopeQueryDto } from '../../common/dto/read-branch-scope-query.dto';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
@@ -21,13 +22,13 @@ export class PaymentsController {
   ) {}
 
   @Post(':id/void')
-  void(@Param('id') paymentId: string, @Body() dto: VoidPaymentDto, @CurrentUser() user: AuthUser) {
+  void(@Param('id', ParseCuidPipe) paymentId: string, @Body() dto: VoidPaymentDto, @CurrentUser() user: AuthUser) {
     return this.paymentsService.voidPayment(user.branchId, user, paymentId, dto);
   }
 
   @Post(':id/refunds')
   createRefund(
-    @Param('id') paymentId: string,
+    @Param('id', ParseCuidPipe) paymentId: string,
     @Body() dto: CreateRefundDto,
     @CurrentUser() user: AuthUser,
   ) {
@@ -36,7 +37,7 @@ export class PaymentsController {
 
   @Get(':id/refunds')
   async getRefunds(
-    @Param('id') paymentId: string,
+    @Param('id', ParseCuidPipe) paymentId: string,
     @Query() query: ReadBranchScopeQueryDto,
     @CurrentUser() user: AuthUser,
   ) {

@@ -45,7 +45,16 @@ export class UsersService {
 
   async createUser(dto: CreateUserDto, actorUserId?: string) {
     enforceBranchMembership(dto.branchId);
-    enforcePasswordPolicy(dto.password);
+
+    const hasPassword = Boolean(dto.password?.trim());
+    const hasPin = Boolean(dto.pin?.trim());
+    if (!hasPassword && !hasPin) {
+      throw new BadRequestException('Either password or PIN is required');
+    }
+
+    if (hasPassword) {
+      enforcePasswordPolicy(dto.password!);
+    }
 
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -59,6 +68,15 @@ export class UsersService {
     const branchExists = await this.branchesService.exists(dto.branchId);
     if (!branchExists) {
       throw new BadRequestException('Branch not found');
+    }
+
+    const username = (dto.username?.trim() || dto.email.split('@')[0]).toLowerCase();
+    const existingUsername = await this.prisma.user.findUnique({
+      where: { username },
+      select: { id: true },
+    });
+    if (existingUsername) {
+      throw new BadRequestException('Username already exists');
     }
 
     const roleNames = normalizeRoleNames(dto.roleNames, [APP_ROLES.CASHIER]);
@@ -76,14 +94,18 @@ export class UsersService {
       throw new BadRequestException(`Unknown roles: ${missingRoles.join(', ')}`);
     }
 
-    const hashedPassword = await passwordHasher.hash(dto.password, this.saltRounds);
+    const hashedPassword = hasPassword ? await passwordHasher.hash(dto.password!, this.saltRounds) : null;
+    const pinHash = hasPin ? await passwordHasher.hash(dto.pin!, this.saltRounds) : null;
 
     const user = await this.prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
           name: dto.name,
+          username,
           email: dto.email.toLowerCase(),
           password: hashedPassword,
+          pinHash,
+          isActive: dto.isActive ?? true,
           branchId: dto.branchId,
         },
       });
@@ -122,6 +144,46 @@ export class UsersService {
       },
       include: USER_AUTH_INCLUDE,
     });
+  }
+
+  async findByUsernameForAuth(username: string): Promise<UserWithAuthContext | null> {
+    return this.prisma.user.findUnique({
+      where: {
+        username: username.toLowerCase(),
+      },
+      include: USER_AUTH_INCLUDE,
+    });
+  }
+
+  async findStaff(branchId?: string) {
+    const users = await this.prisma.user.findMany({
+      where: {
+        branchId: branchId || undefined,
+      },
+      include: USER_AUTH_INCLUDE,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+    return users.map((user) => this.toPublicUser(user));
+  }
+
+  async setActiveState(userId: string, isActive: boolean, actorUserId: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive },
+      include: USER_AUTH_INCLUDE,
+    });
+
+    await this.auditService.logAction({
+      userId: actorUserId,
+      action: 'SET_USER_ACTIVE_STATE',
+      entity: 'user',
+      metadata: {
+        targetUserId: user.id,
+        isActive,
+      },
+    });
+
+    return this.toPublicUser(user);
   }
 
   async findByIdForAuth(userId: string): Promise<UserWithAuthContext | null> {
@@ -174,9 +236,11 @@ export class UsersService {
     return {
       id: user.id,
       name: user.name,
+      username: user.username,
       email: user.email,
       branchId: user.branchId,
       branchName: user.branch.name,
+      isActive: user.isActive,
       roles: authPayload.roles,
       permissions: authPayload.permissions,
       createdAt: user.createdAt,

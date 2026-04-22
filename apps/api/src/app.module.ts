@@ -2,12 +2,15 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { JwtModule } from '@nestjs/jwt';
 import { resolve } from 'path';
 import { envValidationSchema } from './config/env.validation';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
+import { InternalNetworkMiddleware } from './common/middleware/internal-network.middleware';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { ErrorTrackerService } from './common/services/error-tracker.service';
+import { NetworkPolicyService } from './common/network/network-policy.service';
 import { PrismaModule } from './database/prisma.module';
 import { AppController } from './app.controller';
 import { AuthModule } from './modules/auth/auth.module';
@@ -31,6 +34,10 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PublicOrderingModule } from './modules/public-ordering/public-ordering.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { OperationsModule } from './modules/operations/operations.module';
+import { WaiterCallsModule } from './modules/waiter-calls/waiter-calls.module';
+import { PrintersModule } from './modules/printers/printers.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   controllers: [AppController],
@@ -52,6 +59,12 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
         ],
       }),
     }),
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.getOrThrow<string>('JWT_SECRET'),
+      }),
+    }),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -67,16 +80,21 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
     ProductsModule,
     CatalogModule,
     StationsModule,
+    PrintersModule,
     ProductionModule,
     PaymentsModule,
     InventoryModule,
     ReportsModule,
+    OperationsModule,
     IntegrationsModule,
+    WaiterCallsModule,
+    CustomersModule,
     PublicOrderingModule,
     RealtimeModule,
   ],
   providers: [
     ErrorTrackerService,
+    NetworkPolicyService,
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,
@@ -93,6 +111,6 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+    consumer.apply(RequestLoggerMiddleware, InternalNetworkMiddleware).forRoutes('*');
   }
 }

@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const ROLES = ['admin', 'cashier', 'waiter', 'production'] as const;
+const ROLES = ['admin', 'manager', 'cashier', 'waiter', 'production'] as const;
 
 const PERMISSIONS = [
   'users.read',
@@ -17,6 +17,7 @@ const PERMISSIONS = [
 
 const ROLE_PERMISSION_MAP: Record<(typeof ROLES)[number], string[]> = {
   admin: [...PERMISSIONS],
+  manager: ['branches.read'],
   cashier: ['branches.read'],
   waiter: ['branches.read'],
   production: ['branches.read'],

@@ -78,6 +78,7 @@ export interface Product {
   categoryId: string;
   name: string;
   description: string | null;
+  allergenTags?: string[];
   sku: string | null;
   imageUrl: string | null;
   basePrice: string | number;
@@ -85,6 +86,16 @@ export interface Product {
   isActive: boolean;
   isAvailable: boolean;
   productType: ProductType;
+  stationRoute?: {
+    id: string;
+    stationId: string;
+    station?: {
+      id: string;
+      name: string;
+      code: string;
+      isActive?: boolean;
+    } | null;
+  } | null;
   category?: Category;
   variants?: ProductVariant[];
   modifierGroupLinks?: ProductModifierGroupLink[];

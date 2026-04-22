@@ -18,11 +18,13 @@ const inventoryRoutes = [
 function InventoryAccessGuard() {
   const { user } = useAuth();
 
-  if (!user?.roles.includes('admin')) {
+  const canAccess = user?.roles.some((role) => ['admin', 'manager', 'cashier'].includes(role));
+
+  if (!canAccess) {
     return (
       <section className="page-card">
         <h1>Inventory Access Restricted</h1>
-        <p className="muted">Only admin users can manage inventory and recipe configuration.</p>
+        <p className="muted">Only admin, manager, or cashier users can access inventory operations.</p>
       </section>
     );
   }

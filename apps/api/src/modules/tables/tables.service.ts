@@ -7,6 +7,8 @@ import {
 import { TableStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { REALTIME_EVENTS } from '../realtime/realtime-events.constants';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableStatusDto } from './dto/update-table-status.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
@@ -17,6 +19,7 @@ export class TablesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async create(branchId: string, actorUserId: string, dto: CreateTableDto) {
@@ -47,6 +50,13 @@ export class TablesService {
         branchId,
         floorId: table.floorId,
       },
+    });
+
+    this.realtimeEvents.emitToBranch(branchId, REALTIME_EVENTS.TABLE_UPDATED, {
+      tableId: table.id,
+      status: table.status,
+      floorId: table.floorId,
+      reason: 'table_created',
     });
 
     return table;
@@ -131,6 +141,13 @@ export class TablesService {
       },
     });
 
+    this.realtimeEvents.emitToBranch(branchId, REALTIME_EVENTS.TABLE_UPDATED, {
+      tableId: updated.id,
+      status: updated.status,
+      floorId: updated.floorId,
+      reason: 'table_updated',
+    });
+
     return updated;
   }
 
@@ -174,6 +191,13 @@ export class TablesService {
         previousStatus: table.status,
         nextStatus: dto.status,
       },
+    });
+
+    this.realtimeEvents.emitToBranch(branchId, REALTIME_EVENTS.TABLE_UPDATED, {
+      tableId: updated.id,
+      status: updated.status,
+      floorId: updated.floorId,
+      reason: 'table_status_changed',
     });
 
     return updated;

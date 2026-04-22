@@ -6,6 +6,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { ParseCuidPipe } from '../../common/pipes/parse-cuid.pipe';
 import { BranchScopeResolverService } from '../branches/branch-scope-resolver.service';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -34,20 +35,20 @@ export class CategoriesController {
 
   @Get(':id')
   @Roles(APP_ROLES.ADMIN, APP_ROLES.CASHIER, APP_ROLES.WAITER)
-  async findById(@Param('id') id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
+  async findById(@Param('id', ParseCuidPipe) id: string, @Query() query: ReadBranchScopeQueryDto, @CurrentUser() user: AuthUser) {
     const branchId = await this.branchScopeResolver.resolveReadBranchId(user, query.branchId);
     return this.categoriesService.findById(branchId, id);
   }
 
   @Patch(':id')
   @Roles(APP_ROLES.ADMIN)
-  update(@Param('id') id: string, @Body() dto: UpdateCategoryDto, @CurrentUser() user: AuthUser) {
+  update(@Param('id', ParseCuidPipe) id: string, @Body() dto: UpdateCategoryDto, @CurrentUser() user: AuthUser) {
     return this.categoriesService.update(user.branchId, id, user.sub, dto);
   }
 
   @Delete(':id')
   @Roles(APP_ROLES.ADMIN)
-  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+  remove(@Param('id', ParseCuidPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.categoriesService.remove(user.branchId, id, user.sub);
   }
 }
